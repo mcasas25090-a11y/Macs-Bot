@@ -13,6 +13,8 @@ const kissAction = {
 
             const videos = [
 
+'https://upload.yotsuba.giize.com/u/oi7yjpj1.mp4', 
+
 'https://upload.yotsuba.giize.com/u/u4AyWhst.mp4',
               
 'https://upload.yotsuba.giize.com/u/77aTQ4MB.mp4',
