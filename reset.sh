@@ -7,7 +7,7 @@ YELLOW='\033[1;33m'
 NC='\033[0m'
 
 clear
-echo -e "${CYAN}┏━━━━✿︎ Kazuma-Mr-Bot ✿︎━━━━╮${NC}"
+echo -e "${CYAN}┏━━━━✿︎ Macs-Mr-Bot ✿︎━━━━╮${NC}"
 echo -e "${CYAN}┃ ${NC}${YELLOW}✐ Iniciando Mantenimiento Total${NC}"
 echo -e "${CYAN}┃ ${NC}${RED}✐ Preparando limpieza de datos...${NC}"
 echo -e "${CYAN}╰━━━━━━━━━━━━━━━━━━━╯${NC}"
