@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 
 export const config = {
-    botName: 'Kazuma',
+    botName: 'Macs',
     currency: 'Coins',
     symbol: '¥',
     owner: [
