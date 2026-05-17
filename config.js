@@ -6,13 +6,11 @@ export const config = {
     currency: 'Coins',
     symbol: '¥',
     owner: [
-        '573508941325@s.whatsapp.net', 
-        '125860308893859@lid',
+        '51937424405@s.whatsapp.net', 
         '18495029889@s.whatsapp.net'
     ], 
     support: [
-        '50557888080@s.whatsapp.net',
-        '51937424405@s.whatsapp.net'
+        '50557888080@s.whatsapp.net'
     ],
     prefix: '#',
     allPrefixes: ['#', '!', '.'],
@@ -34,7 +32,7 @@ export const config = {
         emoji2: '❁',
         emoji3: '✿',
         emoji4: '❀',
-        img1: 'https://upload.yotsuba.giize.com/u/VPpgV7Bn.jpeg'
+        img1:  'https://upload.yotsuba.giize.com/u/Y9gwavKk.jpeg'
     },
 
     apiKzm: 'kzm-AkpQk-lKhaizmu',
