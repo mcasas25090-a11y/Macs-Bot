@@ -55,7 +55,7 @@ const statusCommand = {
 ⁂ CPU ᗒ *${cpuCores} vCores*
 𖧷 Model ᗒ *${cpuModel}*
 
-> *${config.visuals.emoji2}* \`DEVELOPED BY FÉLIX OFC\``.trim();
+> *${config.visuals.emoji2}* \`DEVELOPED BY MACS\``.trim();
 
             await conn.sendMessage(m.chat, { text: textoStatus }, { quoted: m });
 
