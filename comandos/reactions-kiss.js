@@ -12,17 +12,17 @@ const kissAction = {
             let who = m.mentionedJid && m.mentionedJid[0] ? m.mentionedJid[0] : m.quoted ? m.quoted.key.participant || m.quoted.key.remoteJid : null;
 
             const videos = [
-                'https://upload.yotsuba.giize.com/u/mFLRwpm4.mp4',
+
+'https://upload.yotsuba.giize.com/u/u4AyWhst.mp4',
+              
+'https://upload.yotsuba.giize.com/u/77aTQ4MB.mp4',
+ 'https://upload.yotsuba.giize.com/u/mFLRwpm4.mp4',
                 'https://upload.yotsuba.giize.com/u/nRPuGbY4.mp4',
                 'https://upload.yotsuba.giize.com/u/EoSVahci.mp4',
                 'https://upload.yotsuba.giize.com/u/6rJY7zg-.mp4',
 
 'https://upload.yotsuba.giize.com/u/rnjV81yY.mp4', 
-
-'https://upload.yotsuba.giize.com/u/77aTQ4MB.mp4', 
-
-'https://upload.yotsuba.giize.com/u/u4AyWhst.mp4', 
-                'https://upload.yotsuba.giize.com/u/oV99Gb24.mp4'
+ 'https://upload.yotsuba.giize.com/u/oV99Gb24.mp4'
             ];
 
             const randomVideo = videos[Math.floor(Math.random() * videos.length)];
