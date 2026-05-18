@@ -8,49 +8,56 @@ const depCommand = {
     desc: 'Asegura tus coins enviándolas al banco.',
     noPrefix: true,
 
-    run: async (conn, m, { text }) => {
+    run: async (conn, m) => {
         try {
             const userJid = m.sender;
             let userDb = await database.getUser(userJid);
             if (!userDb) userDb = { wallet: 0, bank: 0 };
 
             let wallet = Number(userDb.wallet || 0);
-            if (wallet <= 0) return m.reply(`*${config.visuals.emoji2}* Cartera vacía.`);
+            if (wallet <= 0) return m.reply(`*${config.visuals.emoji2}* No tienes dinero en cartera.`);
 
-            // LEER DIRECTAMENTE DEL MENSAJE ORIGINAL
-            // m.text suele traer el mensaje completo, ej: "#d all"
-            let msg = (m.text || m.body || text || "").toLowerCase();
+            // EL TRUCO: Leemos el mensaje directamente desde el objeto 'm'
+            // m.body o m.text contiene lo que escribiste: "D all"
+            let textoCompleto = (m.body || m.text || "").toLowerCase().trim();
             
-            let amount;
-            if (msg.includes('all') || msg.includes('todo')) {
+            let amount = 0;
+
+            // Buscamos si la palabra 'all' o 'todo' está en CUALQUIER PARTE del mensaje
+            if (textoCompleto.includes('all') || textoCompleto.includes('todo')) {
                 amount = wallet;
             } else {
-                // Extraer solo los números del mensaje
-                let extract = msg.replace(/[^0-9]/g, '');
-                amount = parseInt(extract);
+                // Si no es 'all', buscamos el número
+                let numeroEncontrado = textoCompleto.replace(/[^0-9]/g, '');
+                amount = parseInt(numeroEncontrado);
             }
 
             if (!amount || isNaN(amount) || amount <= 0) {
-                return m.reply(`*${config.visuals.emoji2}* \`FALTAN DATOS\`\n\nUsa: #d [monto] o #d all`);
+                // Si llegamos aquí, es que no detectó ni 'all' ni un número
+                return m.reply(`*${config.visuals.emoji2}* \`DATOS NO DETECTADOS\`\n\nEscribiste: "${textoCompleto}"\nIntenta usar: **#d 500** o **#d all**`);
             }
 
-            if (amount > wallet) return m.reply(`*${config.visuals.emoji2}* No tienes suficiente dinero.`);
+            if (amount > wallet) {
+                return m.reply(`*${config.visuals.emoji2}* Solo tienes ¥${wallet.toLocaleString()} en cartera.`);
+            }
 
+            // Actualizar
             userDb.wallet = wallet - amount;
             userDb.bank = Number(userDb.bank || 0) + amount;
 
             await database.saveUser(userJid, userDb);
 
-            let res = `*${config.visuals.emoji3}* \`DEPÓSITO EXITOSO\`\n\n`;
-            res += `*Monto:* ¥${amount.toLocaleString()}\n`;
-            res += `*Banco:* ¥${userDb.bank.toLocaleString()}`;
+            let exito = `*${config.visuals.emoji3}* \`DEPÓSITO EXITOSO\`\n\n`;
+            exito += `*¥* Monto: ${amount.toLocaleString()}\n`;
+            exito += `*¥* Banco: ${userDb.bank.toLocaleString()}`;
             
-            await conn.sendMessage(m.chat, { text: res }, { quoted: m });
+            await conn.sendMessage(m.chat, { text: exito }, { quoted: m });
 
         } catch (e) {
-            console.error(e);
-            m.reply("Error en la DB.");
+            console.error("ERROR CRITICO:", e);
+            m.reply("Error de conexión.");
         }
     }
 };
+
 export default depCommand;
