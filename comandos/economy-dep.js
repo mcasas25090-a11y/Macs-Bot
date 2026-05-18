@@ -5,69 +5,39 @@ const depCommand = {
     name: 'deposit',
     alias: ['dep', 'd', 'depositar'],
     category: 'economy',
-    desc: 'Asegura tus coins enviándolas de tu cartera al banco.',
+    desc: 'Asegura tus coins enviándolas al banco.',
     noPrefix: true,
 
     run: async (conn, m, { args, text }) => {
         try {
             const userJid = m.sender;
-            
-            // 1. Obtener datos
             let userDb = await database.getUser(userJid);
-            if (!userDb) {
-                userDb = { wallet: 0, bank: 0, genre: 'No definido', last_claim: new Date(0).toISOString() };
-            }
+            if (!userDb) userDb = { wallet: 0, bank: 0 };
 
             let wallet = Number(userDb.wallet || 0);
-            let bank = Number(userDb.bank || 0);
+            if (wallet <= 0) return m.reply(`*${config.visuals.emoji2}* No tienes dinero en cartera.`);
 
-            if (wallet <= 0) {
-                return m.reply(`*${config.visuals.emoji2}* \`CARTERA VACÍA\`\n\nNo tienes nada que depositar.`);
-            }
+            // Detección segura de cantidad
+            let input = '';
+            if (text) input = text.trim().toLowerCase();
+            else if (args && args.length > 0) input = args[0].toLowerCase();
 
-            // 2. DETECCIÓN ULTRA-FLEXIBLE DE DATOS
-            // Buscamos en args, en text, o directamente en el mensaje de m
-            let fullText = text || args.join(' ') || (m.body ? m.body.split(' ').slice(1).join(' ') : '');
-            let input = fullText.trim().toLowerCase();
-            
-            if (!input) {
-                return m.reply(`*${config.visuals.emoji2}* \`FALTAN DATOS\`\n\nUsa: *d [cantidad]* o *d all*.\n*Ejemplo:* #dep 5000`);
-            }
+            if (!input) return m.reply(`*${config.visuals.emoji2}* Ingresa una cantidad o usa *all*.`);
 
-            let amount;
-            if (input.includes('all')) {
-                amount = wallet;
-            } else {
-                amount = parseInt(input.replace(/[^0-9]/g, ''));
-            }
+            let amount = input.includes('all') ? wallet : parseInt(input.replace(/[^0-9]/g, ''));
 
-            // 3. Validar números
-            if (isNaN(amount) || amount <= 0) {
-                return m.reply(`*${config.visuals.emoji2}* Cantidad inválida.`);
-            }
+            if (isNaN(amount) || amount <= 0) return m.reply(`*${config.visuals.emoji2}* Cantidad inválida.`);
+            if (amount > wallet) return m.reply(`*${config.visuals.emoji2}* Solo tienes ¥${wallet.toLocaleString()}.`);
 
-            if (amount > wallet) {
-                return m.reply(`*${config.visuals.emoji2}* Solo tienes **¥${wallet.toLocaleString()}** en cartera.`);
-            }
-
-            // 4. Guardar
             userDb.wallet = wallet - amount;
-            userDb.bank = bank + amount;
+            userDb.bank = Number(userDb.bank || 0) + amount;
 
             await database.saveUser(userJid, userDb);
-
-            let texto = `*${config.visuals.emoji3}* \`DEPÓSITO EXITOSO\` *${config.visuals.emoji3}*\n\n`;
-            texto += `*${config.visuals.emoji} Guardaste:* ¥${amount.toLocaleString()}\n`;
-            texto += `*${config.visuals.emoji4} En Banco:* ¥${userDb.bank.toLocaleString()}\n\n`;
-            texto += `> *Cartera:* ¥${userDb.wallet.toLocaleString()}`;
-
-            await conn.sendMessage(m.chat, { text: texto }, { quoted: m });
-
+            m.reply(`*${config.visuals.emoji3}* Depositaste ¥${amount.toLocaleString()} correctamente.`);
         } catch (e) {
-            console.error("ERROR EN DEPOSIT:", e);
-            m.reply(`*${config.visuals.emoji2}* Error de base de datos. Verifica si Postgres está activo.`);
+            console.error(e);
+            m.reply("Error en la base de datos.");
         }
     }
 };
-
 export default depCommand;
