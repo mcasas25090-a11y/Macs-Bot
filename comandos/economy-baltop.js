@@ -1,55 +1,45 @@
 import { config } from '../config.js';
-import { query } from '../database.js';
+import { database } from '../database.js';
 
 const baltopCommand = {
     name: 'baltop',
-    alias: ['topbank', 'topmoney'],
+    alias: ['topbalance', 'ranking'],
     category: 'economy',
-    desc: 'Visualiza el ranking de los usuarios más ricos.',
+    desc: 'Muestra a los usuarios más ricos.',
     noPrefix: true,
 
-    run: async (conn, m, args) => {
+    run: async (conn, m) => {
         try {
-            let page = args[0] ? parseInt(args[0]) : 1;
-            if (isNaN(page) || page < 1) page = 1;
-
-            const pageSize = 10;
-            const offset = (page - 1) * pageSize;
-
-            const res = await query(
-                `SELECT jid, wallet, bank, (wallet + bank) as total 
-                 FROM users 
-                 WHERE (wallet + bank) > 0 
-                 ORDER BY total DESC 
-                 LIMIT $1 OFFSET $2`, 
-                [pageSize, offset]
-            );
-
+            // SOLUCIÓN AL ERROR: Convertimos el texto a NUMERIC solo para la suma y el orden
+            const query = `
+                SELECT jid, wallet, bank 
+                FROM users 
+                ORDER BY (CAST(COALESCE(wallet, '0') AS NUMERIC) + CAST(COALESCE(bank, '0') AS NUMERIC)) DESC 
+                LIMIT 10
+            `;
+            
+            const res = await database.pool.query(query);
             const topUsers = res.rows;
 
-            if (topUsers.length === 0) {
-                return m.reply(`*${config.visuals.emoji2}* No hay registros en esta página.`);
-            }
+            if (topUsers.length === 0) return m.reply("No hay usuarios registrados en la economía.");
 
-            let list = `*${config.visuals.emoji3} BALANCE TOP - PÁGINA ${page} ${config.visuals.emoji3}*\n\n`;
-
-            topUsers.forEach((user, index) => {
-                const userId = user.jid.split('@')[0];
-                const total = parseInt(user.total);
-                const bank = parseInt(user.bank);
-                list += `*${offset + index + 1}.* @${userId}\n`;
-                list += `» *Total:* ¥${total.toLocaleString()}\n`;
-                list += `» *Banco:* ¥${bank.toLocaleString()}\n\n`;
+            let text = `*${config.visuals?.emoji3 || '🏆'}* \`RANKING DE RIQUEZA\`\n\n`;
+            
+            topUsers.forEach((user, i) => {
+                const jid = user.jid.split('@')[0];
+                // Usamos BigInt para mostrar los números gigantes sin errores de redondeo
+                const total = BigInt(user.wallet || 0) + BigInt(user.bank || 0);
+                text += `*${i + 1}.* @${jid}\n`;
+                text += `*¥* ${total.toLocaleString()}\n\n`;
             });
 
-            await conn.sendMessage(m.chat, { 
-                text: list,
-                mentions: topUsers.map(u => u.jid)
-            }, { quoted: m });
+            text += `> Usa #bal para ver tu posición.`;
+
+            m.reply(text, { mentions: topUsers.map(u => u.jid) });
 
         } catch (e) {
-            console.error(e);
-            m.reply(`*${config.visuals.emoji2}* Error al cargar el ranking.`);
+            console.error("Error en Baltop:", e);
+            m.reply(`*🚨 ERROR DE SQL:*\n${e.message}`);
         }
     }
 };
