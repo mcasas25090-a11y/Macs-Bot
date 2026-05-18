@@ -1,4 +1,5 @@
 import { config } from '../config.js';
+import { database } from '../database.js';
 
 const removeCoins = {
     name: 'removecoins',
@@ -8,8 +9,9 @@ const removeCoins = {
     isOwner: true,
     noPrefix: true,
 
-    run: async (conn, m, args) => {
+    run: async (conn, m, { args }) => {
         try {
+            // 1. Verificación de Creador (Owner)
             const realOwnerNumber = (typeof config.owner[0] === 'string' ? config.owner[0] : config.owner[0][0]).replace(/\D/g, '');
             const senderNumber = m.sender.split('@')[0].replace(/\D/g, '');
 
@@ -17,20 +19,31 @@ const removeCoins = {
                 return m.reply(`*${config.visuals.emoji2}* \`ACCESO DENEGADO\`\n\nEste comando solo puede ser ejecutado por mi creador.`);
             }
 
-            let rawTarget = m.quoted ? m.quoted.sender || m.quoted.key.participant || m.quoted.key.remoteJid : m.mentionedJid?.[0];
+            // 2. Identificar al objetivo
+            let rawTarget = m.quoted ? m.quoted.sender : m.mentionedJid?.[0];
 
             if (!rawTarget) {
                 return m.reply(`*${config.visuals.emoji2}* \`Usuario Requerido\`\n\nMenciona a alguien o responde a su mensaje.`);
             }
 
             const targetJid = rawTarget.replace(/:.*@/g, '@');
-            const userDb = global.db.data.users[targetJid];
             const userId = targetJid.split('@')[0];
 
-            if (!userDb || ((userDb.wallet || 0) + (userDb.bank || 0)) <= 0) {
-                return m.reply(`*${config.visuals.emoji2}* \`Usuario Sin Fondos\`\n\n@${userId} no tiene dinero para confiscar.`, { mentions: [targetJid] });
+            // 3. Obtener datos de PostgreSQL
+            let userDb = await database.getUser(targetJid);
+            if (!userDb) {
+                return m.reply(`*${config.visuals.emoji2}* El usuario no está registrado en la base de datos.`);
             }
 
+            let wallet = Number(userDb.wallet || 0);
+            let bank = Number(userDb.bank || 0);
+            let totalDisponible = wallet + bank;
+
+            if (totalDisponible <= 0) {
+                return m.reply(`*${config.visuals.emoji2}* @${userId} ya no tiene dinero que quitar.`, { mentions: [targetJid] });
+            }
+
+            // 4. Procesar cantidad
             const isAll = args.some(arg => arg.toLowerCase() === 'all' || arg.toLowerCase() === 'todo');
             const montoInput = parseInt(args.find(arg => !isNaN(arg) && !arg.includes('@')));
 
@@ -38,9 +51,6 @@ const removeCoins = {
                 return m.reply(`*${config.visuals.emoji2}* \`Monto Inválido\`\n\nIngresa una cantidad o usa *all*.`);
             }
 
-            let wallet = userDb.wallet || 0;
-            let bank = userDb.bank || 0;
-            let totalDisponible = wallet + bank;
             let retiradoReal = 0;
 
             if (isAll) {
@@ -51,25 +61,26 @@ const removeCoins = {
                 retiradoReal = Math.min(totalDisponible, montoInput);
                 let restante = retiradoReal;
 
-                if (userDb.wallet >= restante) {
-                    userDb.wallet -= restante;
+                // Primero quitamos de cartera, si falta, quitamos de banco
+                if (wallet >= restante) {
+                    userDb.wallet = wallet - restante;
                 } else {
-                    restante -= (userDb.wallet || 0);
+                    restante -= wallet;
                     userDb.wallet = 0;
-                    userDb.bank = Math.max(0, (userDb.bank || 0) - restante);
+                    userDb.bank = Math.max(0, bank - restante);
                 }
             }
 
-            const texto = `*${config.visuals.emoji3}* \`SANCIÓN ECONÓMICA\` *${config.visuals.emoji3}*\n\n*❁ Usuario:* @${userId}\n*❁ Monto Retirado:* \`¥${retiradoReal.toLocaleString()}\` ${isAll ? '*(TODO)*' : ''}\n\n*${config.visuals.emoji} Cartera:* ¥${(userDb.wallet || 0).toLocaleString()}\n*${config.visuals.emoji4} Banco:* ¥${(userDb.bank || 0).toLocaleString()}\n\n> Los fondos han sido confiscados correctamente.`;
+            // 5. Guardar cambios en PostgreSQL
+            await database.saveUser(targetJid, userDb);
 
-            await conn.sendMessage(m.chat, { 
-                text: texto, 
-                mentions: [targetJid] 
-            }, { quoted: m });
+            const texto = `*${config.visuals.emoji3}* \`SANCIÓN ECONÓMICA\` *${config.visuals.emoji3}*\n\n*❁ Usuario:* @${userId}\n*❁ Monto Retirado:* \`¥${retiradoReal.toLocaleString()}\` ${isAll ? '*(TODO)*' : ''}\n\n*${config.visuals.emoji} Cartera:* ¥${Number(userDb.wallet).toLocaleString()}\n*${config.visuals.emoji4} Banco:* ¥${Number(userDb.bank).toLocaleString()}\n\n> Los fondos han sido confiscados correctamente.`;
+
+            await conn.sendMessage(m.chat, { text: texto, mentions: [targetJid] }, { quoted: m });
 
         } catch (e) {
-            console.error(e);
-            m.reply(`*${config.visuals.emoji2}* Error interno al procesar la sanción.`);
+            console.error("ERROR EN REMOVECOINS:", e);
+            m.reply(`*${config.visuals.emoji2}* Error al intentar confiscar el dinero.`);
         }
     }
 };
