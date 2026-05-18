@@ -5,54 +5,45 @@ const depCommand = {
     name: 'deposit',
     alias: ['dep', 'd', 'depositar'],
     category: 'economy',
-    desc: 'Asegura tus coins.',
+    desc: 'Asegura tus coins enviándolas de tu cartera al banco.',
     noPrefix: true,
 
-    run: async (conn, m, { text, args }) => {
+    run: async (conn, m, { args }) => {
         try {
             const userJid = m.sender;
             let userDb = await database.getUser(userJid);
-            if (!userDb) userDb = { wallet: 0, bank: 0 };
 
-            let wallet = Number(userDb.wallet || 0);
-            if (wallet <= 0) return m.reply("Tu cartera está vacía.");
+            if (!userDb) return m.reply(`*${config.visuals.emoji2}* No tienes una cuenta activa.`);
 
-            // BUSCADOR RADICAL DE TEXTO
-            // Intentamos todas las formas posibles en las que el bot guarda el mensaje
-            let msgRaw = text || 
-                         (args && args.join(' ')) || 
-                         m.body || 
-                         m.text || 
-                         (m.message && m.message.conversation) || 
-                         (m.message && m.message.extendedTextMessage && m.message.extendedTextMessage.text) || 
-                         "";
+            const wallet = Number(userDb.wallet || 0);
+            if (wallet <= 0) return m.reply(`*${config.visuals.emoji2}* \`CARTERA VACÍA\`\n\nNo tienes dinero para depositar.`);
 
-            let lowerMsg = msgRaw.toLowerCase().trim();
-            let amount = 0;
+            let amount = args[0];
+            if (!amount) return m.reply(`*${config.visuals.emoji2}* \`FALTAN DATOS\`\n\nIngresa una cantidad o usa *all*.`);
 
-            if (lowerMsg.includes('all') || lowerMsg.includes('todo')) {
+            if (amount.toLowerCase() === 'all') {
                 amount = wallet;
             } else {
-                let extract = lowerMsg.replace(/[^0-9]/g, '');
-                amount = parseInt(extract);
+                amount = parseInt(amount.replace(/[^0-9]/g, ''));
             }
 
-            if (!amount || isNaN(amount) || amount <= 0) {
-                // Si esto vuelve a salir vacío, el problema está en cómo pixel.js pasa el objeto 'm'
-                return m.reply(`*⚠️ DATOS NO DETECTADOS*\n\nIntenta escribir el monto después del comando.\nEjemplo: *#d 100*`);
-            }
-
-            if (amount > wallet) return m.reply("No tienes tanto dinero.");
+            if (isNaN(amount) || amount <= 0) return m.reply(`*${config.visuals.emoji2}* Cantidad inválida.`);
+            if (wallet < amount) return m.reply(`*${config.visuals.emoji2}* No tienes suficiente dinero en cartera.`);
 
             userDb.wallet = wallet - amount;
             userDb.bank = Number(userDb.bank || 0) + amount;
 
+            let texto = `*${config.visuals.emoji3}* \`DEPÓSITO EXITOSO\` *${config.visuals.emoji3}*\n\n`;
+            texto += `*${config.visuals.emoji} Monto:* ¥${amount.toLocaleString()}\n`;
+            texto += `*${config.visuals.emoji4} Banco:* ¥${userDb.bank.toLocaleString()}\n\n`;
+            texto += `> *Restante en Cartera:* ¥${userDb.wallet.toLocaleString()}`;
+
             await database.saveUser(userJid, userDb);
-            m.reply(`✅ Depositaste ¥${amount.toLocaleString()} al banco.`);
+            await conn.sendMessage(m.chat, { text: texto }, { quoted: m });
 
         } catch (e) {
             console.error(e);
-            m.reply("Error en la base de datos.");
+            m.reply(`*${config.visuals.emoji2}* Error en el depósito.`);
         }
     }
 };
