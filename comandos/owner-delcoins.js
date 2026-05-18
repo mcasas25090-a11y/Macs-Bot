@@ -1,76 +1,75 @@
 import { config } from '../config.js';
-import { database } from '../database.js';
 
 const removeCoins = {
     name: 'removecoins',
     alias: ['quitarcoins', 'delcoins', 'removerdinero'],
     category: 'owner',
-    desc: 'Confisca monedas de un usuario.',
+    desc: 'Confisca monedas de un usuario de su cartera y banco.',
     isOwner: true,
     noPrefix: true,
 
-    run: async (conn, m, { text }) => {
+    run: async (conn, m, args) => {
         try {
-            // 1. Verificar Owner
-            const ownerRaw = config.owner[0] && typeof config.owner[0] === 'object' ? config.owner[0][0] : config.owner[0];
-            const realOwner = String(ownerRaw).replace(/\D/g, '');
+            const realOwnerNumber = (typeof config.owner[0] === 'string' ? config.owner[0] : config.owner[0][0]).replace(/\D/g, '');
             const senderNumber = m.sender.split('@')[0].replace(/\D/g, '');
 
-            if (senderNumber !== realOwner) return m.reply("Comando exclusivo del dueño.");
+            if (senderNumber !== realOwnerNumber) {
+                return m.reply(`*${config.visuals.emoji2}* \`ACCESO DENEGADO\`\n\nEste comando solo puede ser ejecutado por mi creador.`);
+            }
 
-            // 2. Identificar Objetivo
-            let target = m.quoted ? m.quoted.sender : (m.mentionedJid && m.mentionedJid[0] ? m.mentionedJid[0] : m.sender);
-            const targetJid = target.replace(/:.*@/g, '@');
+            let rawTarget = m.quoted ? m.quoted.sender || m.quoted.key.participant || m.quoted.key.remoteJid : m.mentionedJid?.[0];
+
+            if (!rawTarget) {
+                return m.reply(`*${config.visuals.emoji2}* \`Usuario Requerido\`\n\nMenciona a alguien o responde a su mensaje.`);
+            }
+
+            const targetJid = rawTarget.replace(/:.*@/g, '@');
+            const userDb = global.db.data.users[targetJid];
             const userId = targetJid.split('@')[0];
 
-            // 3. Obtener Usuario
-            let userDb = await database.getUser(targetJid);
-            if (!userDb) userDb = { jid: targetJid, wallet: 0, bank: 0 };
-
-            // Asegurarnos de que sean números válidos de JS
-            let wallet = Number(String(userDb.wallet).replace(/[^0-9]/g, '') || 0);
-            let bank = Number(String(userDb.bank).replace(/[^0-9]/g, '') || 0);
-            let total = wallet + bank;
-
-            if (total <= 0) return m.reply(`@${userId} no tiene monedas.`, { mentions: [targetJid] });
-
-            // 4. Leer Monto
-            let msg = (text || m.body || m.text || "").toLowerCase();
-            let amount = 0;
-
-            if (msg.includes('all') || msg.includes('todo')) {
-                amount = total;
-            } else {
-                let numStr = msg.replace(/[^0-9]/g, '');
-                amount = parseInt(numStr);
+            if (!userDb || ((userDb.wallet || 0) + (userDb.bank || 0)) <= 0) {
+                return m.reply(`*${config.visuals.emoji2}* \`Usuario Sin Fondos\`\n\n@${userId} no tiene dinero para confiscar.`, { mentions: [targetJid] });
             }
 
-            if (isNaN(amount) || amount <= 0) return m.reply("Especifica un monto válido. Ej: #delcoins 100");
+            const isAll = args.some(arg => arg.toLowerCase() === 'all' || arg.toLowerCase() === 'todo');
+            const montoInput = parseInt(args.find(arg => !isNaN(arg) && !arg.includes('@')));
 
-            // 5. Aplicar la resta
-            let aQuitar = Math.min(total, amount);
-            let restante = aQuitar;
-
-            if (wallet >= restante) {
-                wallet -= restante;
-            } else {
-                restante -= wallet;
-                wallet = 0;
-                bank = Math.max(0, bank - restante);
+            if (!isAll && (!montoInput || montoInput <= 0)) {
+                return m.reply(`*${config.visuals.emoji2}* \`Monto Inválido\`\n\nIngresa una cantidad o usa *all*.`);
             }
 
-            // 6. Guardar
-            userDb.wallet = wallet;
-            userDb.bank = bank;
+            let wallet = userDb.wallet || 0;
+            let bank = userDb.bank || 0;
+            let totalDisponible = wallet + bank;
+            let retiradoReal = 0;
 
-            await database.saveUser(targetJid, userDb);
+            if (isAll) {
+                retiradoReal = totalDisponible;
+                userDb.wallet = 0;
+                userDb.bank = 0;
+            } else {
+                retiradoReal = Math.min(totalDisponible, montoInput);
+                let restante = retiradoReal;
 
-            m.reply(`*${config.visuals.emoji3}* Confiscado: ¥${aQuitar.toLocaleString()}\n*Usuario:* @${userId}`, { mentions: [targetJid] });
+                if (userDb.wallet >= restante) {
+                    userDb.wallet -= restante;
+                } else {
+                    restante -= (userDb.wallet || 0);
+                    userDb.wallet = 0;
+                    userDb.bank = Math.max(0, (userDb.bank || 0) - restante);
+                }
+            }
+
+            const texto = `*${config.visuals.emoji3}* \`SANCIÓN ECONÓMICA\` *${config.visuals.emoji3}*\n\n*❁ Usuario:* @${userId}\n*❁ Monto Retirado:* \`¥${retiradoReal.toLocaleString()}\` ${isAll ? '*(TODO)*' : ''}\n\n*${config.visuals.emoji} Cartera:* ¥${(userDb.wallet || 0).toLocaleString()}\n*${config.visuals.emoji4} Banco:* ¥${(userDb.bank || 0).toLocaleString()}\n\n> Los fondos han sido confiscados correctamente.`;
+
+            await conn.sendMessage(m.chat, { 
+                text: texto, 
+                mentions: [targetJid] 
+            }, { quoted: m });
 
         } catch (e) {
-            console.error("ERROR REAL EN DELCOINS:", e);
-            // ESTA ES LA LÍNEA MÁGICA: Imprime el error exacto de código en WhatsApp
-            m.reply(`*🚨 ERROR DETECTADO:*\n${e.message || e}`);
+            console.error(e);
+            m.reply(`*${config.visuals.emoji2}* Error interno al procesar la sanción.`);
         }
     }
 };
