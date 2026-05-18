@@ -8,57 +8,51 @@ const depCommand = {
     desc: 'Asegura tus coins enviándolas de tu cartera al banco.',
     noPrefix: true,
 
-    run: async (conn, m, { args }) => {
+    run: async (conn, m, { args, text }) => {
         try {
             const userJid = m.sender;
             
             // 1. Obtener datos del usuario
             let userDb = await database.getUser(userJid);
-            
-            // Si el usuario no existe en la DB, lo inicializamos
             if (!userDb) {
-                userDb = { 
-                    wallet: 0, 
-                    bank: 0, 
-                    genre: 'No definido', 
-                    marry: null, 
-                    last_claim: new Date(0).toISOString() 
-                };
+                userDb = { wallet: 0, bank: 0, genre: 'No definido', last_claim: new Date(0).toISOString() };
             }
 
-            // Aseguramos que los valores sean números
             let wallet = Number(userDb.wallet || 0);
             let bank = Number(userDb.bank || 0);
 
-            // 2. Validaciones iniciales
+            // 2. Validación de cartera vacía
             if (wallet <= 0) {
                 return m.reply(`*${config.visuals.emoji2}* \`CARTERA VACÍA\`\n\nNo tienes dinero para depositar.`);
             }
 
-            let input = args && args[0] ? args[0] : null;
-            if (!input) return m.reply(`*${config.visuals.emoji2}* \`FALTAN DATOS\`\n\nIngresa una cantidad o usa *all*.\n*Ejemplo:* #dep 5000`);
+            // 3. Detectar la cantidad (probamos con args o con el texto directo)
+            let input = (args && args[0] ? args[0] : text)?.trim().toLowerCase();
+            
+            if (!input) {
+                return m.reply(`*${config.visuals.emoji2}* \`FALTAN DATOS\`\n\nIngresa una cantidad o usa *all*.\n*Ejemplo:* #dep 5000`);
+            }
 
             let amount;
-            if (input.toLowerCase() === 'all') {
+            if (input === 'all') {
                 amount = wallet;
             } else {
                 amount = parseInt(input.replace(/[^0-9]/g, ''));
             }
 
-            // 3. Validación de la cantidad solicitada
+            // 4. Validar cantidad resultante
             if (isNaN(amount) || amount <= 0) {
-                return m.reply(`*${config.visuals.emoji2}* Cantidad inválida.`);
+                return m.reply(`*${config.visuals.emoji2}* Cantidad inválida. Escribe un número o *all*.`);
             }
 
             if (amount > wallet) {
                 return m.reply(`*${config.visuals.emoji2}* \`FONDOS INSUFICIENTES\`\n\nNo puedes depositar **¥${amount.toLocaleString()}** porque solo tienes **¥${wallet.toLocaleString()}**.`);
             }
 
-            // 4. Actualizar el objeto (Usando los nombres exactos de tu tabla Postgres)
+            // 5. Guardar cambios
             userDb.wallet = wallet - amount;
             userDb.bank = bank + amount;
 
-            // 5. Guardar en la base de datos (Igual que en work.js)
             await database.saveUser(userJid, userDb);
 
             let texto = `*${config.visuals.emoji3}* \`DEPÓSITO EXITOSO\` *${config.visuals.emoji3}*\n\n`;
@@ -69,8 +63,8 @@ const depCommand = {
             await conn.sendMessage(m.chat, { text: texto }, { quoted: m });
 
         } catch (e) {
-            console.error("CRITICAL ERROR IN DEPOSIT:", e);
-            m.reply(`*${config.visuals.emoji2}* Error interno. Revisa la consola de Termux.`);
+            console.error("ERROR EN DEPOSIT:", e);
+            m.reply(`*${config.visuals.emoji2}* Error de conexión con la base de datos.`);
         }
     }
 };
