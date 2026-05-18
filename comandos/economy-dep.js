@@ -1,5 +1,5 @@
 import { config } from '../config.js';
-import { database } from '../database.js'; // Importante para tu base de datos actual
+import { database } from '../database.js';
 
 const depCommand = {
     name: 'deposit',
@@ -10,59 +10,62 @@ const depCommand = {
 
     run: async (conn, m, { args }) => {
         try {
-            const userJid = m.sender;
+            // Limpiamos el JID para que Postgres no dé error de formato
+            const userJid = m.sender.split('@')[0] + '@s.whatsapp.net';
             
-            // 1. Obtener datos reales de PostgreSQL
+            // 1. Obtener datos de la DB
             let userDb = await database.getUser(userJid);
+            
             if (!userDb) {
-                return m.reply(`*${config.visuals.emoji2}* No tienes una cuenta activa en el sistema.`);
+                return m.reply(`*${config.visuals.emoji2}* No tienes una cuenta registrada. ¡Usa el bot para crear una!`);
             }
 
-            // Convertimos a número por seguridad (Postgres a veces devuelve strings)
+            // Convertir a número para evitar el error de "NaN" o concatenación de texto
             let wallet = Number(userDb.wallet || 0);
             let bank = Number(userDb.bank || 0);
 
-            // 2. Validación de cartera vacía
             if (wallet <= 0) {
-                return m.reply(`*${config.visuals.emoji2}* \`CARTERA VACÍA\`\n\nNo tienes dinero en tu cartera para depositar.`);
+                return m.reply(`*${config.visuals.emoji2}* \`CARTERA VACÍA\`\n\nNo tienes dinero para depositar.`);
             }
 
             let input = args[0];
-            if (!input) return m.reply(`*${config.visuals.emoji2}* \`FALTAN DATOS\`\n\nIngresa una cantidad o usa *all*.\n*Ejemplo:* #dep 5000`);
+            if (!input) return m.reply(`*${config.visuals.emoji2}* \`FALTAN DATOS\`\n\nIngresa una cantidad o usa *all*.`);
 
             let amount;
             if (input.toLowerCase() === 'all') {
                 amount = wallet;
             } else {
+                // Quitamos cualquier símbolo que no sea número
                 amount = parseInt(input.replace(/[^0-9]/g, ''));
             }
 
-            // 3. Medición y Validación de cantidad
+            // 2. Validación de cantidad máxima posible
             if (isNaN(amount) || amount <= 0) {
-                return m.reply(`*${config.visuals.emoji2}* Cantidad inválida. Por favor ingresa un número real.`);
+                return m.reply(`*${config.visuals.emoji2}* Por favor, ingresa un número válido.`);
             }
 
             if (amount > wallet) {
-                return m.reply(`*${config.visuals.emoji2}* \`FONDOS INSUFICIENTES\`\n\nIntentaste depositar **¥${amount.toLocaleString()}**, pero solo tienes **¥${wallet.toLocaleString()}** en tu cartera.\n\n> Usa \`#dep all\` para depositarlo todo.`);
+                return m.reply(`*${config.visuals.emoji2}* \`FONDOS INSUFICIENTES\`\n\nNo puedes depositar **¥${amount.toLocaleString()}** porque solo tienes **¥${wallet.toLocaleString()}**.`);
             }
 
-            // 4. Actualizar valores
+            // 3. Actualizar el objeto con los nombres de columnas que creamos en Postgres
             userDb.wallet = wallet - amount;
             userDb.bank = bank + amount;
 
-            // 5. Guardar en PostgreSQL
+            // 4. Guardar cambios
             await database.saveUser(userJid, userDb);
 
             let texto = `*${config.visuals.emoji3}* \`DEPÓSITO EXITOSO\` *${config.visuals.emoji3}*\n\n`;
-            texto += `*${config.visuals.emoji} Monto depositado:* ¥${amount.toLocaleString()}\n`;
-            texto += `*${config.visuals.emoji4} Total en Banco:* ¥${userDb.bank.toLocaleString()}\n\n`;
+            texto += `*${config.visuals.emoji} Depositaste:* ¥${amount.toLocaleString()}\n`;
+            texto += `*${config.visuals.emoji4} Ahora en Banco:* ¥${userDb.bank.toLocaleString()}\n\n`;
             texto += `> *Restante en Cartera:* ¥${userDb.wallet.toLocaleString()}`;
 
             await conn.sendMessage(m.chat, { text: texto }, { quoted: m });
 
         } catch (e) {
-            console.error(e);
-            m.reply(`*${config.visuals.emoji2}* Error al procesar el depósito en la base de datos.`);
+            // Esto imprimirá el error real en tu Termux para que sepas qué falló
+            console.error("ERROR EN DEPOSIT:", e);
+            m.reply(`*${config.visuals.emoji2}* Error de conexión con la base de datos.`);
         }
     }
 };
