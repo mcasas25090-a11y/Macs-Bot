@@ -5,57 +5,54 @@ const depCommand = {
     name: 'deposit',
     alias: ['dep', 'd', 'depositar'],
     category: 'economy',
-    desc: 'Asegura tus coins enviándolas al banco.',
+    desc: 'Asegura tus coins.',
     noPrefix: true,
 
-    run: async (conn, m) => {
+    run: async (conn, m, { text, args }) => {
         try {
             const userJid = m.sender;
             let userDb = await database.getUser(userJid);
             if (!userDb) userDb = { wallet: 0, bank: 0 };
 
             let wallet = Number(userDb.wallet || 0);
-            if (wallet <= 0) return m.reply(`*${config.visuals.emoji2}* No tienes dinero en cartera.`);
+            if (wallet <= 0) return m.reply("Tu cartera está vacía.");
 
-            // EL TRUCO: Leemos el mensaje directamente desde el objeto 'm'
-            // m.body o m.text contiene lo que escribiste: "D all"
-            let textoCompleto = (m.body || m.text || "").toLowerCase().trim();
-            
+            // BUSCADOR RADICAL DE TEXTO
+            // Intentamos todas las formas posibles en las que el bot guarda el mensaje
+            let msgRaw = text || 
+                         (args && args.join(' ')) || 
+                         m.body || 
+                         m.text || 
+                         (m.message && m.message.conversation) || 
+                         (m.message && m.message.extendedTextMessage && m.message.extendedTextMessage.text) || 
+                         "";
+
+            let lowerMsg = msgRaw.toLowerCase().trim();
             let amount = 0;
 
-            // Buscamos si la palabra 'all' o 'todo' está en CUALQUIER PARTE del mensaje
-            if (textoCompleto.includes('all') || textoCompleto.includes('todo')) {
+            if (lowerMsg.includes('all') || lowerMsg.includes('todo')) {
                 amount = wallet;
             } else {
-                // Si no es 'all', buscamos el número
-                let numeroEncontrado = textoCompleto.replace(/[^0-9]/g, '');
-                amount = parseInt(numeroEncontrado);
+                let extract = lowerMsg.replace(/[^0-9]/g, '');
+                amount = parseInt(extract);
             }
 
             if (!amount || isNaN(amount) || amount <= 0) {
-                // Si llegamos aquí, es que no detectó ni 'all' ni un número
-                return m.reply(`*${config.visuals.emoji2}* \`DATOS NO DETECTADOS\`\n\nEscribiste: "${textoCompleto}"\nIntenta usar: **#d 500** o **#d all**`);
+                // Si esto vuelve a salir vacío, el problema está en cómo pixel.js pasa el objeto 'm'
+                return m.reply(`*⚠️ DATOS NO DETECTADOS*\n\nIntenta escribir el monto después del comando.\nEjemplo: *#d 100*`);
             }
 
-            if (amount > wallet) {
-                return m.reply(`*${config.visuals.emoji2}* Solo tienes ¥${wallet.toLocaleString()} en cartera.`);
-            }
+            if (amount > wallet) return m.reply("No tienes tanto dinero.");
 
-            // Actualizar
             userDb.wallet = wallet - amount;
             userDb.bank = Number(userDb.bank || 0) + amount;
 
             await database.saveUser(userJid, userDb);
-
-            let exito = `*${config.visuals.emoji3}* \`DEPÓSITO EXITOSO\`\n\n`;
-            exito += `*¥* Monto: ${amount.toLocaleString()}\n`;
-            exito += `*¥* Banco: ${userDb.bank.toLocaleString()}`;
-            
-            await conn.sendMessage(m.chat, { text: exito }, { quoted: m });
+            m.reply(`✅ Depositaste ¥${amount.toLocaleString()} al banco.`);
 
         } catch (e) {
-            console.error("ERROR CRITICO:", e);
-            m.reply("Error de conexión.");
+            console.error(e);
+            m.reply("Error en la base de datos.");
         }
     }
 };
