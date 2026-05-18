@@ -9,79 +9,66 @@ const removeCoins = {
     isOwner: true,
     noPrefix: true,
 
-    run: async (conn, m, { text, args }) => {
+    run: async (conn, m, { text }) => {
         try {
-            // 1. OBTENER EL JID DEL OWNER DE FORMA SEGURA
-            const ownerData = config.owner[0];
-            const ownerNumber = (Array.isArray(ownerData) ? ownerData[0] : ownerData).replace(/\D/g, '');
+            // 1. Verificación de Creador (Owner)
+            const ownerRaw = config.owner[0] && typeof config.owner[0] === 'object' ? config.owner[0][0] : config.owner[0];
+            const realOwner = String(ownerRaw).replace(/\D/g, '');
             const senderNumber = m.sender.split('@')[0].replace(/\D/g, '');
 
-            // 2. VERIFICACIÓN DE SEGURIDAD
-            if (senderNumber !== ownerNumber) {
-                return m.reply(`*${config.visuals.emoji2}* Solo mi creador puede usar este comando.`);
-            }
+            if (senderNumber !== realOwner) return m.reply("Comando exclusivo del dueño.");
 
-            // 3. IDENTIFICAR AL OBJETIVO (Respuesta > Mención > Tú mismo)
+            // 2. Identificar Objetivo
             let target = m.quoted ? m.quoted.sender : (m.mentionedJid && m.mentionedJid[0] ? m.mentionedJid[0] : m.sender);
             const targetJid = target.replace(/:.*@/g, '@');
             const userId = targetJid.split('@')[0];
 
-            // 4. OBTENER DATOS (Y evitar el error si el usuario no existe)
+            // 3. Obtener Usuario
             let userDb = await database.getUser(targetJid);
-            if (!userDb) {
-                userDb = { jid: targetJid, wallet: 0, bank: 0 };
-            }
+            if (!userDb) userDb = { jid: targetJid, wallet: '0', bank: '0' };
 
-            // Convertir a números para evitar errores de "BigInt" o "NaN"
-            let wallet = Number(userDb.wallet || 0);
-            let bank = Number(userDb.bank || 0);
+            // Usamos BigInt para que no se pierda ni un centavo con números gigantes
+            let wallet = BigInt(String(userDb.wallet || '0').replace(/\D/g, '') || '0');
+            let bank = BigInt(String(userDb.bank || '0').replace(/\D/g, '') || '0');
             let total = wallet + bank;
 
-            // 5. DETECTAR EL MONTO (Buscamos en text, args o m.body)
-            let fullText = text || (args && args.join(' ')) || m.body || "";
-            let amount = 0;
+            // 4. Detectar Monto
+            let msg = (text || m.body || "").toLowerCase();
+            let amount;
 
-            if (fullText.toLowerCase().includes('all') || fullText.toLowerCase().includes('todo')) {
+            if (msg.includes('all') || msg.includes('todo')) {
                 amount = total;
             } else {
-                let extracted = fullText.replace(/[^0-9]/g, '');
-                amount = parseInt(extracted);
+                let num = msg.replace(/[^0-9]/g, '');
+                if (!num) return m.reply("Especifica cuánto quitar. Ej: #delcoins 100");
+                amount = BigInt(num);
             }
 
-            // 6. VALIDACIONES FINALES
-            if (isNaN(amount) || amount <= 0) {
-                return m.reply(`*${config.visuals.emoji2}* Escribe una cantidad válida.\n*Ejemplo:* #delcoins 5000`);
-            }
+            if (total <= 0n) return m.reply("El usuario no tiene dinero.");
 
-            if (total <= 0) {
-                return m.reply(`*${config.visuals.emoji2}* El usuario @${userId} no tiene monedas.`, { mentions: [targetJid] });
-            }
+            // 5. Aplicar la quita
+            let aQuitar = amount > total ? total : amount;
+            let restante = aQuitar;
 
-            // 7. EJECUTAR LA QUITA (Primero Cartera, luego Banco)
-            let aQuitar = Math.min(total, amount);
-            let pendiente = aQuitar;
-
-            if (wallet >= pendiente) {
-                userDb.wallet = wallet - pendiente;
+            if (wallet >= restante) {
+                wallet -= restante;
             } else {
-                pendiente -= wallet;
-                userDb.wallet = 0;
-                userDb.bank = Math.max(0, bank - pendiente);
+                restante -= wallet;
+                wallet = 0n;
+                bank = bank > restante ? bank - restante : 0n;
             }
 
-            // 8. GUARDAR EN POSTGRESQL
+            // 6. Guardar como STRING para la DB
+            userDb.wallet = wallet.toString();
+            userDb.bank = bank.toString();
+
             await database.saveUser(targetJid, userDb);
 
-            const mensajeExito = `*${config.visuals.emoji3}* \`CONFISCACIÓN EXITOSA\`\n\n` +
-                                `*❁ De:* @${userId}\n` +
-                                `*❁ Monto:* ¥${aQuitar.toLocaleString()}\n\n` +
-                                `> Saldo restante actualizado en la base de datos.`;
-
-            await conn.sendMessage(m.chat, { text: mensajeExito, mentions: [targetJid] }, { quoted: m });
+            m.reply(`*${config.visuals.emoji3}* Confiscado: ¥${aQuitar.toLocaleString()}\n*Usuario:* @${userId}`, { mentions: [targetJid] });
 
         } catch (e) {
-            console.error("ERROR CRITICO EN DELCOINS:", e);
-            m.reply(`*${config.visuals.emoji2}* Error interno: Probablemente el número es demasiado grande para la base de datos.`);
+            console.error(e);
+            m.reply("Error: Asegúrate de haber corrido el comando de Termux del PASO 1.");
         }
     }
 };
