@@ -1,5 +1,9 @@
 import { config } from '../config.js';
+import { database } from '../database.js';
 import { winFrases, loseFrases } from './frases/slut.js';
+
+// Mapa para el cooldown en memoria (10 minutos)
+const cooldowns = new Map();
 
 const slutCommand = {
     name: 'slut',
@@ -10,45 +14,54 @@ const slutCommand = {
 
     run: async (conn, m) => {
         try {
-            const user = m.sender.replace(/:.*@/g, '@');
+            const userJid = m.sender;
             const ahora = Date.now();
-            const cooldown = 10 * 60 * 1000;
+            const cooldownTime = 10 * 60 * 1000; // 10 minutos
 
-            if (!global.db.data.users[user]) global.db.data.users[user] = {};
-            const userDb = global.db.data.users[user];
-
-            const tiempoPasado = ahora - (userDb.lastSlut || 0);
-
-            if (tiempoPasado < cooldown) {
-                const restante = Math.floor((cooldown - tiempoPasado) / 60000);
-                const segundos = Math.floor(((cooldown - tiempoPasado) % 60000) / 1000);
-                return m.reply(`*${config.visuals.emoji2}* \`AGOTAMIENTO\`\n\n> Necesitas descansar. Vuelve en **${restante}m ${segundos}s**.`);
+            // 1. Verificar Cooldown
+            if (cooldowns.has(userJid)) {
+                const tiempoPasado = ahora - cooldowns.get(userJid);
+                if (tiempoPasado < cooldownTime) {
+                    const restante = cooldownTime - tiempoPasado;
+                    const minutos = Math.floor(restante / 60000);
+                    const segundos = Math.floor((restante % 60000) / 1000);
+                    return m.reply(`*${config.visuals.emoji2}* \`AGOTAMIENTO\`\n\n> Necesitas descansar. Vuelve en **${minutos}m ${segundos}s**.`);
+                }
             }
 
-            const esPerdida = Math.random() < 0.03;
+            // 2. Obtener datos de la base de datos PostgreSQL
+            let userDb = await database.getUser(userJid);
+            if (!userDb) {
+                userDb = { wallet: 0, bank: 0, genre: 'No definido', last_claim: new Date(0).toISOString() };
+            }
+
+            const esPerdida = Math.random() < 0.03; // 3% de probabilidad de perder
             const monto = Math.floor(Math.random() * (8000 - 3000 + 1)) + 3000;
 
+            let msg = '';
             if (esPerdida) {
                 const frase = loseFrases[Math.floor(Math.random() * loseFrases.length)];
-                userDb.wallet = Math.max(0, (userDb.wallet || 0) - monto);
+                userDb.wallet = Math.max(0, (Number(userDb.wallet) || 0) - monto);
 
-                let msg = `*${config.visuals.emoji2}* \`MALA NOCHE\`\n\n`;
+                msg = `*${config.visuals.emoji2}* \`MALA NOCHE\`\n\n`;
                 msg += `${frase}\n`;
                 msg += `*Perdiste:* ¥${monto.toLocaleString()}\n\n`;
-                msg += `> *Cartera:* ¥${userDb.wallet.toLocaleString()}`;
-                await m.reply(msg);
             } else {
                 const frase = winFrases[Math.floor(Math.random() * winFrases.length)];
-                userDb.wallet = (userDb.wallet || 0) + monto;
+                userDb.wallet = (Number(userDb.wallet) || 0) + monto;
 
-                let msg = `*${config.visuals.emoji3}* \`NOCHE DE ÉXITO\` *${config.visuals.emoji3}*\n\n`;
+                msg = `*${config.visuals.emoji3}* \`NOCHE DE ÉXITO\` *${config.visuals.emoji3}*\n\n`;
                 msg += `${frase}\n`;
                 msg += `*Ganaste:* ¥${monto.toLocaleString()}\n\n`;
-                msg += `> *Cartera:* ¥${userDb.wallet.toLocaleString()}`;
-                await m.reply(msg);
             }
 
-            userDb.lastSlut = ahora;
+            msg += `> *Cartera:* ¥${userDb.wallet.toLocaleString()}`;
+
+            // 3. Guardar Cooldown y Datos
+            cooldowns.set(userJid, ahora);
+            await database.saveUser(userJid, userDb);
+            
+            await m.reply(msg);
 
         } catch (e) {
             console.error(e);
