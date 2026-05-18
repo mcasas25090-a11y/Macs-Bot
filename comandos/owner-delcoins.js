@@ -9,47 +9,66 @@ const removeCoins = {
     isOwner: true,
     noPrefix: true,
 
-    run: async (conn, m, { args, text }) => {
+    run: async (conn, m, { text }) => {
         try {
+            // 1. Verificación de Owner
             const realOwner = (typeof config.owner[0] === 'string' ? config.owner[0] : config.owner[0][0]).replace(/\D/g, '');
             if (m.sender.split('@')[0].replace(/\D/g, '') !== realOwner) return m.reply("Solo mi creador usa esto.");
 
-            let target = m.quoted ? m.quoted.sender : (m.mentionedJid && m.mentionedJid.length > 0 ? m.mentionedJid[0] : null);
+            // 2. BUSCADOR RADICAL DE TEXTO (Igual al que funcionó en Deposit)
+            let msgRaw = text || m.body || m.text || "";
+            let lowerMsg = msgRaw.toLowerCase().trim();
+
+            // 3. IDENTIFICAR OBJETIVO
+            // Prioridad: Respuesta > Mención > El que envía el comando (tú)
+            let target = m.quoted ? m.quoted.sender : (m.mentionedJid && m.mentionedJid[0] ? m.mentionedJid[0] : m.sender);
             
-            if (!target && text) {
-                const match = text.match(/\d+/);
-                if (match) target = match[0] + '@s.whatsapp.net';
+            const targetJid = target.replace(/:.*@/g, '@');
+            const userId = targetJid.split('@')[0];
+
+            let userDb = await database.getUser(targetJid);
+            if (!userDb) return m.reply("El usuario no está en la base de datos.");
+
+            let wallet = Number(userDb.wallet || 0);
+            let bank = Number(userDb.bank || 0);
+            let total = wallet + bank;
+
+            if (total <= 0) return m.reply(`@${userId} ya no tiene dinero.`, { mentions: [targetJid] });
+
+            // 4. DETECTAR MONTO
+            let amount = 0;
+            if (lowerMsg.includes('all') || lowerMsg.includes('todo')) {
+                amount = total;
+            } else {
+                let extract = lowerMsg.replace(/[^0-9]/g, '');
+                amount = parseInt(extract);
             }
 
-            if (!target) return m.reply(`*${config.visuals.emoji2}* Responde a alguien o menciónalo.`);
+            if (!amount || isNaN(amount) || amount <= 0) {
+                return m.reply(`*${config.visuals.emoji2}* Especifica cuánto quitar.\nEjemplo: *#delcoins 100*`);
+            }
 
-            let userDb = await database.getUser(target);
-            if (!userDb) return m.reply("Usuario no registrado.");
-
-            let total = Number(userDb.wallet || 0) + Number(userDb.bank || 0);
-            let input = text || "";
-            let amount = input.toLowerCase().includes('all') ? total : parseInt(input.replace(/[^0-9]/g, ''));
-
-            if (isNaN(amount) || amount <= 0) return m.reply("Especifica un monto válido.");
-
+            // 5. EJECUTAR QUITA
             let aQuitar = Math.min(total, amount);
             let restante = aQuitar;
 
-            let w = Number(userDb.wallet || 0);
-            if (w >= restante) {
-                userDb.wallet = w - restante;
+            if (wallet >= restante) {
+                userDb.wallet = wallet - restante;
             } else {
-                restante -= w;
+                restante -= wallet;
                 userDb.wallet = 0;
-                userDb.bank = Math.max(0, Number(userDb.bank || 0) - restante);
+                userDb.bank = Math.max(0, bank - restante);
             }
 
-            await database.saveUser(target, userDb);
-            m.reply(`*${config.visuals.emoji3}* Se han confiscado ¥${aQuitar.toLocaleString()} de @${target.split('@')[0]}`, { mentions: [target] });
+            await database.saveUser(targetJid, userDb);
+            
+            m.reply(`*${config.visuals.emoji3}* Confiscado: ¥${aQuitar.toLocaleString()}\n*Usuario:* @${userId}`, { mentions: [targetJid] });
+
         } catch (e) {
             console.error(e);
-            m.reply("Error crítico al remover monedas.");
+            m.reply("Error al procesar la sanción.");
         }
     }
 };
+
 export default removeCoins;
