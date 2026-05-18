@@ -1,4 +1,5 @@
 import { config } from '../config.js';
+import { database } from '../database.js';
 import { workFrases } from './frases/work.js';
 
 const workCommand = {
@@ -11,14 +12,23 @@ const workCommand = {
 
     run: async (conn, m) => {
         try {
-            const user = m.sender.replace(/:.*@/g, '@');
+            const userJid = m.sender;
             const ahora = Date.now();
             const cooldown = 5 * 60 * 1000;
 
-            if (!global.db.data.users[user]) global.db.data.users[user] = {};
-            const userDb = global.db.data.users[user];
+            let userDb = await database.getUser(userJid);
+            if (!userDb) {
+                userDb = { 
+                    wallet: 0, 
+                    bank: 0, 
+                    genre: 'No definido', 
+                    marry: null, 
+                    last_claim: new Date(0).toISOString(),
+                    lastWork: 0 
+                };
+            }
 
-            const tiempoPasado = ahora - (userDb.lastWork || 0);
+            const tiempoPasado = ahora - (Number(userDb.lastWork) || 0);
 
             if (tiempoPasado < cooldown) {
                 const restante = cooldown - tiempoPasado;
@@ -32,7 +42,7 @@ const workCommand = {
             const recompensa = Math.floor(Math.random() * (5000 - 2000 + 1)) + 2000;
             const frase = workFrases[Math.floor(Math.random() * workFrases.length)];
 
-            userDb.wallet = (userDb.wallet || 0) + recompensa;
+            userDb.wallet = Number(userDb.wallet || 0) + recompensa;
             userDb.lastWork = ahora;
 
             let texto = `*${config.visuals.emoji3}* \`CHAMBA EXITOSA\` *${config.visuals.emoji3}*\n\n`;
@@ -40,6 +50,7 @@ const workCommand = {
             texto += `*${config.visuals.emoji} Ganaste:* ¥${recompensa.toLocaleString()}\n\n`;
             texto += `> *Cartera:* ¥${userDb.wallet.toLocaleString()}`;
 
+            await database.saveUser(userJid, userDb);
             await conn.sendMessage(m.chat, { text: texto }, { quoted: m });
 
         } catch (e) {
