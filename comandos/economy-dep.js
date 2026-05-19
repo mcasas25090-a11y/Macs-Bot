@@ -1,57 +1,55 @@
-import { config } from '../config.js';
 import { database } from '../database.js';
 
-const depCommand = {
+const depositCommand = {
     name: 'deposit',
     alias: ['dep', 'd', 'depositar'],
     category: 'economy',
-    desc: 'Asegura tus coins.',
+    desc: 'Deposita tus coins de la billetera al banco.',
     noPrefix: true,
 
-    run: async (conn, m, { text, args }) => {
+    run: async (conn, m, args, usedPrefix, commandName, text) => {
         try {
-            // SEGURIDAD: Verificar que el mensaje y el remitente existen
-            if (!m || !m.sender) return;
+            const user = global.db.data.users[m.sender];
+            const wallet = user.wallet || 0;
 
-            const userJid = m.sender;
-            let userDb = await database.getUser(userJid);
-            if (!userDb) userDb = { wallet: 0, bank: 0 };
+            if (!args[0]) {
+                return m.reply(`*❁ ¡ERROR DE USO! ❁*\n\n» Especifica una cantidad o escribe *all*.\n» Ejemplo: *${usedPrefix || ''}${commandName} 5000* o *${usedPrefix || ''}${commandName} all*`);
+            }
 
-            // LÍNEA 21 (CORREGIDA): Usamos "?" para que si algo falla, no crashee el bot
-            let wallet = Number(userDb?.wallet || 0);
-            
-            if (wallet <= 0) return m.reply("No tienes monedas en tu cartera.");
-
-            // Buscar el texto de forma ultra-segura
-            let msgRaw = text || (args && args.length > 0 ? args.join(' ') : "") || m.body || "";
-            let lowerMsg = msgRaw.toLowerCase().trim();
-            let amount = 0;
-
-            if (lowerMsg.includes('all') || lowerMsg.includes('todo')) {
+            let amount;
+            if (args[0].toLowerCase() === 'all') {
                 amount = wallet;
             } else {
-                let extract = lowerMsg.replace(/[^0-9]/g, '');
-                amount = parseInt(extract);
+                amount = parseInt(args[0].replace(/[^0-9]/g, ''));
             }
 
-            if (!amount || isNaN(amount) || amount <= 0) {
-                return m.reply(`*${config.visuals?.emoji2 || '⚠️'}* \`FALTAN DATOS\`\n\nUsa: #d [monto] o #d all`);
+            if (isNaN(amount) || amount <= 0) {
+                return m.reply(`*❁ ¡CANTIDAD INVÁLIDA! ❁*\n\n» Ingresa un número entero mayor a cero o la palabra *all*.`);
             }
 
-            if (amount > wallet) return m.reply("No tienes tanto dinero.");
+            if (wallet < amount) {
+                return m.reply(`*❁ \`FONDOS INSUFICIENTES\` ❁*\n\n» No tienes esa cantidad en tu billetera.\n» Dispones de: *$${wallet.toLocaleString()}* coins.`);
+            }
 
-            userDb.wallet = wallet - amount;
-            userDb.bank = Number(userDb.bank || 0) + amount;
+            user.wallet = wallet - amount;
+            user.bank = (user.bank || 0) + amount;
 
-            await database.saveUser(userJid, userDb);
-            m.reply(`✅ Depositaste ¥${amount.toLocaleString()} al banco.`);
+            await database.saveUser(m.sender, user);
+
+            let txt = `*❁ \`DEPÓSITO EXITOSO\` ❁*\n\n`;
+            txt += `» Has asegurado tus coins en la bóveda.\n`;
+            txt += `*❀ Depositado »* $${amount.toLocaleString()} coins\n`;
+            txt += `*✿ En Billetera »* $${user.wallet.toLocaleString()} coins\n`;
+            txt += `*✰ En Banco »* $${user.bank.toLocaleString()} coins\n\n`;
+            txt += `> ✰ Tus fondos se encuentran protegidos de robos.`;
+
+            return m.reply(txt);
 
         } catch (e) {
-            console.error("Error en Deposit:", e);
-            // Esto evita que el bot se apague si hay un error
-            if (m && m.reply) m.reply("Ocurrió un error interno, pero no me apagué.");
+            console.error(e);
+            m.reply('Ocurrió un error interno al procesar el comando.');
         }
     }
 };
 
-export default depCommand;
+export default depositCommand;
