@@ -1,46 +1,50 @@
-import { config } from '../config.js';
 import { database } from '../database.js';
 
 const balanceCommand = {
     name: 'balance',
-    alias: ['bal', 'cartera', 'billetera', 'banco'],
+    alias: ['bal', 'wallet', 'banco', 'coins'],
     category: 'economy',
-    desc: 'Consulta el estado financiero actual (cartera, banco y total).',
+    desc: 'Muestra tu balance actual de coins.',
     noPrefix: true,
-    isGroup: true,
 
-    run: async (conn, m) => {
+    run: async (conn, m, args, usedPrefix, commandName, text) => {
         try {
-            let rawJid = m.sender;
-
-            if (m.message?.extendedTextMessage?.contextInfo?.mentionedJid?.[0]) {
-                rawJid = m.message.extendedTextMessage.contextInfo.mentionedJid[0];
-            } else if (m.quoted) {
-                rawJid = m.quoted.key.participant || m.quoted.key.remoteJid;
+            let who;
+            if (m.quoted && m.quoted.sender) {
+                who = m.quoted.sender;
+            } else if (m.mentionedJid && m.mentionedJid[0]) {
+                who = m.mentionedJid[0];
+            } else {
+                who = m.sender;
             }
 
-            const targetJid = rawJid.split('@')[0].split(':')[0] + '@s.whatsapp.net';
-            const userDb = await database.getUser(targetJid);
+            let user = global.db.data.users[who];
+            if (!user) {
+                user = await database.getUser(who);
+            }
 
-            const wallet = userDb ? parseInt(userDb.wallet || 0) : 0;
-            const bank = userDb ? parseInt(userDb.bank || 0) : 0;
+            if (!user) {
+                user = { wallet: 0, bank: 0, genre: 'No definido', marry: null, last_claim: '1970-01-01T00:00:00.000Z', last_crime: '1970-01-01T00:00:00.000Z', last_work: '1970-01-01T00:00:00.000Z', last_slut: '1970-01-01T00:00:00.000Z', last_flip: '1970-01-01T00:00:00.000Z', last_rob: '1970-01-01T00:00:00.000Z' };
+                global.db.data.users[who] = user;
+                await database.saveUser(who, user);
+            }
+
+            const wallet = user.wallet || 0;
+            const bank = user.bank || 0;
             const total = wallet + bank;
-            const userId = targetJid.split('@')[0];
 
-            let texto = `*${config.visuals.emoji3} BALANCE DE CUENTA ${config.visuals.emoji3}*\n\n`;
-            texto += `» *Cartera:* ¥${wallet.toLocaleString()}\n`;
-            texto += `» *Banco:* ¥${bank.toLocaleString()}\n\n`;
-            texto += `> *Total:* ¥${total.toLocaleString()}\n`;
-            texto += `> *Usuario:* @${userId}`;
+            let txt = `*❁ \`BALANCE DE CUENTA\` ❁*\n\n`;
+            txt += `» *Usuario:* @${who.split('@')[0]}\n`;
+            txt += `*❀ Billetera »* $${wallet.toLocaleString()} coins\n`;
+            txt += `*✿ Banco »* $${bank.toLocaleString()} coins\n`;
+            txt += `*✰ Total Neto »* $${total.toLocaleString()} coins\n\n`;
+            txt += `> ¡Sigue sumando coins para dominar la economía!`;
 
-            await conn.sendMessage(m.chat, { 
-                text: texto, 
-                mentions: [targetJid] 
-            }, { quoted: m });
+            return conn.sendMessage(m.chat, { text: txt, mentions: [who] }, { quoted: m });
 
         } catch (e) {
             console.error(e);
-            m.reply(`*${config.visuals.emoji2}* Error al consultar el balance.`);
+            m.reply('Ocurrió un error interno al procesar el comando.');
         }
     }
 };
