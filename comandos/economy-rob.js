@@ -1,71 +1,106 @@
-import { config } from '../config.js';
+import { database } from '../database.js';
 
 const robCommand = {
     name: 'rob',
-    alias: ['robar', 'asaltar'],
+    alias: ['robar', 'quitarcoins', 'atracar'],
     category: 'economy',
-    desc: 'Sustrae todo el efectivo de la cartera de un usuario inactivo.',
+    desc: 'Roba todo el dinero en efectivo de la billetera de un usuario inactivo.',
     noPrefix: true,
 
-    run: async (conn, m, args) => {
+    run: async (conn, m, args, usedPrefix, commandName, text) => {
         try {
-            const thief = m.sender.replace(/:.*@/g, '@');
-            let rawTarget = m.quoted ? m.quoted.key.participant || m.quoted.key.remoteJid : m.mentionedJid?.[0];
-
-            if (!rawTarget && args[0]) {
-                rawTarget = args[0].replace(/[^0-9]/g, '') + '@s.whatsapp.net';
+            let who;
+            if (m.quoted && m.quoted.sender) {
+                who = m.quoted.sender;
+            } else if (m.mentionedJid && m.mentionedJid[0]) {
+                who = m.mentionedJid[0];
             }
 
-            if (!rawTarget) return m.reply(`*${config.visuals.emoji2}* \`Error de objetivo\`\n\nDebes mencionar o responder a alguien.`);
-            const targetJid = rawTarget.replace(/:.*@/g, '@');
-
-            if (thief === targetJid) return m.reply(`*${config.visuals.emoji2}* No puedes robarte a ti mismo.`);
-
-            const ahora = Date.now();
-            if (!global.db.data.users[thief]) global.db.data.users[thief] = {};
-            if (!global.db.data.users[targetJid]) global.db.data.users[targetJid] = {};
-
-            const userThief = global.db.data.users[thief];
-            const userVictim = global.db.data.users[targetJid];
-
-            const cooldown = 60 * 60 * 1000;
-            const tiempoPasado = ahora - (userThief.lastRob || 0);
-
-            if (tiempoPasado < cooldown) {
-                const restante = Math.floor((cooldown - tiempoPasado) / 60000);
-                return m.reply(`*${config.visuals.emoji2}* \`AGITAMIENTO\`\n\nEstás cansado. Espera **${restante}m**.`);
+            if (!who) {
+                return m.reply(`*❁* Debes mencionar a un usuario o responder a su mensaje para cometer el asalto.\n\n» Ejemplo: *${usedPrefix || ''}${commandName} @user*`);
             }
 
-            const lastActive = userVictim.lastSeen || 0;
-            if ((ahora - lastActive) < 30 * 60 * 1000) {
-                return m.reply(`*${config.visuals.emoji2}* \`OBJETIVO ALERTA\`\n\nSolo puedes robar a quienes no han hablado en 30 minutos.`);
+            if (who === m.sender) {
+                return m.reply(`*❁* No puedes robarte a ti mismo, búscate una víctima real.`);
             }
 
-            const botin = userVictim.wallet || 0;
+            let thief = global.db.data.users[m.sender];
+            const now = new Date();
+            const lastRob = new Date(thief.last_rob || '1970-01-01T00:00:00.000Z');
 
-            if (botin <= 0) {
-                return m.reply(`*${config.visuals.emoji2}* \`BILLETERA VACÍA\`\n\nEste usuario no lleva nada encima.`);
+            const thiefDifference = now - lastRob;
+            const thiefCooldown = 20 * 60 * 1000;
+
+            if (thiefDifference < thiefCooldown) {
+                const timeLeft = thiefCooldown - thiefDifference;
+                const minutes = Math.floor(timeLeft / (1000 * 60));
+                const seconds = Math.floor((timeLeft % (1000 * 60)) / 1000);
+                return m.reply(`*❁ ¡ESPERA UN MOMENTO! ❁*\n\n» Estás bajo la mira de las autoridades. Espera *${minutes}m ${seconds}s* antes de planear otro golpe.`);
             }
 
-            userVictim.wallet = 0;
-            userThief.wallet = (userThief.wallet || 0) + botin;
-            userThief.lastRob = ahora;
+            let victim = global.db.data.users[who];
+            if (!victim) {
+                victim = await database.getUser(who);
+            }
 
-            const victimId = targetJid.split('@')[0];
+            if (!victim) {
+                return m.reply(`*❁* La víctima seleccionada no tiene un registro activo en el sistema.`);
+            }
 
-            let texto = `*${config.visuals.emoji3}* \`¡GOLPE MAESTRO!\` *${config.visuals.emoji3}*\n\n`;
-            texto += `Has dejado en la calle a @${victimId}.\n`;
-            texto += `*${config.visuals.emoji} Botín Total:* ¥${botin.toLocaleString()}\n\n`;
-            texto += `> ¡Más vale que corras antes de que revise su cuenta!`;
+            const victimWallet = victim.wallet || 0;
+            if (victimWallet <= 0) {
+                return conn.sendMessage(m.chat, { text: `*❁ \`BILLETERA VACÍA\` ❁*\n\n» @${who.split('@')[0]} no lleva dinero encima en este momento. Sus fondos están a salvo en el banco.`, mentions: [who] }, { quoted: m });
+            }
 
-            await conn.sendMessage(m.chat, { 
-                text: texto, 
-                mentions: [targetJid] 
-            }, { quoted: m });
+            const timestamps = [
+                victim.last_claim,
+                victim.last_crime,
+                victim.last_work,
+                victim.last_slut,
+                victim.last_flip,
+                victim.last_rob
+            ];
+
+            let lastActivityTime = new Date('1970-01-01T00:00:00.000Z').getTime();
+            timestamps.forEach(ts => {
+                if (ts) {
+                    const time = new Date(ts).getTime();
+                    if (time > lastActivityTime) lastActivityTime = time;
+                }
+            });
+
+            const victimDifference = now.getTime() - lastActivityTime;
+            const victimRequiredInactivity = 30 * 60 * 1000;
+
+            if (victimDifference < victimRequiredInactivity) {
+                const remainingInactivity = victimRequiredInactivity - victimDifference;
+                const minLeft = Math.ceil(remainingInactivity / (1000 * 60));
+                return conn.sendMessage(m.chat, { text: `*❁ \`OBJETIVO ALERTA\` ❁*\n\n» @${who.split('@')[0]} ha estado activo recientemente en el bot.\n» Debes esperar a que baje la guardia y esté completamente inactivo (Faltan aprox. *${minLeft}m*).`, mentions: [who] }, { quoted: m });
+            }
+
+            thief.last_rob = now.toISOString();
+
+            thief.wallet = (thief.wallet || 0) + victimWallet;
+            victim.wallet = 0;
+
+            global.db.data.users[m.sender] = thief;
+            global.db.data.users[who] = victim;
+
+            await database.saveUser(m.sender, thief);
+            await database.saveUser(who, victim);
+
+            let txt = `*❁ \`ASALTO TOTAL EXCEPCIONAL\` ❁*\n\n`;
+            txt += `» ¡Aprovechaste el descuido del usuario a la perfección!\n`;
+            txt += `*❀ Ladrón »* @${m.sender.split('@')[0]}\n`;
+            txt += `*✿ Víctima »* @${who.split('@')[0]}\n`;
+            txt += `*✰ Botín Extraído »* $${victimWallet.toLocaleString()} coins de su cartera\n\n`;
+            txt += `> ✰ Asegura tus ganancias en el banco antes de que te pase lo mismo.`;
+
+            return conn.sendMessage(m.chat, { text: txt, mentions: [m.sender, who] }, { quoted: m });
 
         } catch (e) {
             console.error(e);
-            m.reply(`*${config.visuals.emoji2}* Error en el asalto.`);
+            m.reply('Ocurrió un error interno al procesar el comando.');
         }
     }
 };
