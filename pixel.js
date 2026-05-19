@@ -69,9 +69,10 @@ export const pixelHandler = async (conn, m, config) => {
         const isListedOwner = ownerNumbers.includes(senderNumber) || m.key.fromMe;
 
         const type = Object.keys(m.message)[0];
-        const body = (type === 'conversation') ? m.message.conversation : 
-                     (type === 'extendedTextMessage') ? m.message.extendedTextMessage.text : 
-                     (m.message[type] && m.message[type].caption) ? m.message[type].caption : '';
+        let body = '';
+        if (type === 'conversation') body = m.message.conversation;
+        else if (type === 'extendedTextMessage') body = m.message.extendedTextMessage.text;
+        else if (m.message[type] && m.message[type].caption) body = m.message[type].caption;
 
         if (!body && !m.quoted) return;
 
@@ -110,7 +111,6 @@ export const pixelHandler = async (conn, m, config) => {
 
         const args = body.trim().split(/ +/).slice(1);
         let text = args.join(' ');
-        if (!text && m.quoted && m.quoted.text) text = m.quoted.text;
 
         const cmd = global.commands.get(commandName) || 
                     Array.from(global.commands.values()).find(c => c.alias && c.alias.includes(commandName));
@@ -142,7 +142,7 @@ export const pixelHandler = async (conn, m, config) => {
         const subPath = path.join(subSessionsPath, myJid, 'settings.json');
         const moodPath = path.join(moodSessionsPath, myJid, 'settings.json');
         let sessionSettings = {};
-        
+
         if (await fs.pathExists(subPath)) {
             sessionSettings = await fs.readJson(subPath).catch(() => ({}));
         } else if (await fs.pathExists(moodPath)) {
@@ -154,6 +154,12 @@ export const pixelHandler = async (conn, m, config) => {
             botLongName: sessionSettings.longName || config.botName || 'Kazuma',
             botBanner: sessionSettings.banner || config.visuals.img1
         };
+
+        if (m.message[type] && m.message[type].contextInfo) {
+            m.mentionedJid = m.message[type].contextInfo.mentionedJid || [];
+        } else {
+            m.mentionedJid = [];
+        }
 
         await cmd.run(conn, m, args, usedPrefix, commandName, text);
 
