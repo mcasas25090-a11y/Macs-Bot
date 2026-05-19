@@ -18,14 +18,20 @@ const rwCommand = {
     run: async (conn, m) => {
         try {
             const group = m.chat;
-            const userJid = m.sender.replace(/:.*@/g, '@');
+            const userJid = m.sender;
             const ahora = new Date();
-            const cooldownTime = 10 * 60 * 1000;
+            const cooldownTime = 5 * 60 * 1000;
 
-            let userDb = await database.getUser(userJid);
-            if (!userDb) userDb = { jid: userJid, wallet: 0, metadata: {} };
+            let userDb = global.db.data.users[userJid];
+            if (!userDb) {
+                userDb = await database.getUser(userJid);
+            }
 
-            const lastRoll = userDb.metadata?.lastGachaRoll ? new Date(userDb.metadata.lastGachaRoll).getTime() : 0;
+            if (!userDb) {
+                userDb = { wallet: 0, bank: 0, genre: 'No definido', marry: null, last_claim: '1970-01-01T00:00:00.000Z', last_crime: '1970-01-01T00:00:00.000Z', last_work: '1970-01-01T00:00:00.000Z', last_slut: '1970-01-01T00:00:00.000Z', last_flip: '1970-01-01T00:00:00.000Z', last_rob: '1970-01-01T00:00:00.000Z', last_rw: '1970-01-01T00:00:00.000Z' };
+            }
+
+            const lastRoll = new Date(userDb.last_rw || '1970-01-01T00:00:00.000Z').getTime();
             const tiempoPasado = ahora.getTime() - lastRoll;
 
             if (tiempoPasado < cooldownTime) {
@@ -42,7 +48,7 @@ const rwCommand = {
 
             const randomId = allIds[Math.floor(Math.random() * allIds.length)];
             const infoFija = plantillaPersonajes[randomId];
-            
+
             const infoGrupo = await database.getCharacterOwner(group, randomId);
             const status = infoGrupo ? infoGrupo.status : 'libre';
             const owner = infoGrupo ? infoGrupo.user_jid : null;
@@ -79,13 +85,14 @@ const rwCommand = {
 
             if (!global.db.data.chats[group]) global.db.data.chats[group] = {};
             if (!global.db.data.chats[group].rolls) global.db.data.chats[group].rolls = {};
-            
+
             global.db.data.chats[group].rolls[sent.key.id] = { 
                 id: randomId, 
                 expiresAt: ahora.getTime() + 60000 
             };
 
-            userDb.metadata = { ...userDb.metadata, lastGachaRoll: ahora.toISOString() };
+            userDb.last_rw = ahora.toISOString();
+            global.db.data.users[userJid] = userDb;
             await database.saveUser(userJid, userDb);
 
         } catch (e) {
