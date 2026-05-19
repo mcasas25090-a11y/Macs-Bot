@@ -102,53 +102,6 @@ async function startBot() {
         getMessage: async (key) => { return null }
     });
 
-    conn.newsletterMetadata = async (type, key, viewRole) => {
-        return await conn.newsletterMetadata(type, key, viewRole);
-    };
-
-    conn.newsletterAction = async (jid, type) => {
-        return await conn.newsletterAction(jid, type);
-    };
-
-    conn.newsletterFollow = (jid) => conn.newsletterFollow(jid);
-    conn.newsletterUnfollow = (jid) => conn.newsletterUnfollow(jid);
-    conn.newsletterMute = (jid) => conn.newsletterMute(jid);
-    conn.newsletterUnmute = (jid) => conn.newsletterUnmute(jid);
-
-    conn.newsletterReactMessage = async (jid, serverId, reaction) => {
-        await conn.query({
-            tag: 'message',
-            attrs: {
-                to: jid,
-                ...(reaction ? {} : { edit: '7' }),
-                type: 'reaction',
-                server_id: serverId,
-                id: conn.generateMessageTag()
-            },
-            content: [{ tag: 'reaction', attrs: reaction ? { code: reaction } : {} }]
-        });
-    };
-
-    conn.communityMetadata = async (jid) => {
-        return await conn.communityMetadata(jid);
-    };
-
-    conn.communityFetchAllParticipating = async () => {
-        return await conn.communityFetchAllParticipating();
-    };
-
-    conn.communityLinkGroup = async (groupJid, parentCommunityJid) => {
-        return await conn.communityLinkGroup(groupJid, parentCommunityJid);
-    };
-
-    conn.communityUnlinkGroup = async (groupJid, parentCommunityJid) => {
-        return await conn.communityUnlinkGroup(groupJid, parentCommunityJid);
-    };
-
-    conn.communityRequestParticipantsList = async (jid) => {
-        return await conn.communityRequestParticipantsList(jid);
-    };
-
     conn.getAdminStatus = async (groupJid, senderJid) => {
         const botJid = conn.authState?.creds?.me?.id;
         const meta = await conn.groupMetadata(groupJid).catch(() => null);
@@ -188,7 +141,6 @@ async function startBot() {
 
     conn.ev.on('connection.update', async (update) => {
         const { connection, lastDisconnect } = update;
-
         if (connection === 'close') {
             const reason = lastDisconnect?.error?.output?.statusCode;
             if (reason === DisconnectReason.loggedOut) {
@@ -218,99 +170,43 @@ async function startBot() {
         m.sender = conn.decodeJid ? conn.decodeJid(m.key.participant || m.key.remoteJid) : (m.key.participant || m.key.remoteJid);
         const isGroup = m.chat.endsWith('@g.us');
 
-        const dbUser = await database.getUser(m.sender);
-        if (dbUser) {
-            global.db.data.users[m.sender] = { ...dbUser, daily: dbUser.daily || { lastClaim: 0, streak: 0 } };
-        } else {
-            const newUser = {
-                wallet: 0,
-                bank: 0,
-                genre: 'No definido',
-                marry: null,
-                inventory: {},
-                daily: { lastClaim: 0, streak: 0 }
-            };
-            await database.saveUser(m.sender, newUser);
-            global.db.data.users[m.sender] = newUser;
+        let dbUser = await database.getUser(m.sender);
+        if (!dbUser) {
+            dbUser = { wallet: 0, bank: 0, genre: 'No definido', marry: null, last_claim: '1970-01-01T00:00:00.000Z', last_crime: '1970-01-01T00:00:00.000Z', last_work: '1970-01-01T00:00:00.000Z', last_slut: '1970-01-01T00:00:00.000Z', last_flip: '1970-01-01T00:00:00.000Z', last_rob: '1970-01-01T00:00:00.000Z' };
+            await database.saveUser(m.sender, dbUser);
         }
+        global.db.data.users[m.sender] = dbUser;
 
         if (isGroup) {
-            const dbChat = await database.getChat(m.chat);
-            if (dbChat) {
-                global.db.data.chats[m.chat] = { ...dbChat, rolls: {}, rpg: {}, gacha: {} };
-            } else {
-                const newChat = { welcome: true, antilink: true, detect: true };
-                await database.saveChat(m.chat, newChat);
-                global.db.data.chats[m.chat] = { ...newChat, rolls: {}, rpg: {}, gacha: {} };
+            let dbChat = await database.getChat(m.chat);
+            if (!dbChat) {
+                dbChat = { welcome: 1, antilink: 1, detect: 1 };
+                await database.saveChat(m.chat, dbChat);
             }
+            global.db.data.chats[m.chat] = dbChat;
         }
-
-        const realOwnerNumber = (typeof config.owner[0] === 'string' ? config.owner[0] : config.owner[0][0]).replace(/\D/g, '');
-        const senderNumber = m.sender.split('@')[0].replace(/\D/g, '');
-        const isRealOwner = senderNumber === realOwnerNumber || m.key.fromMe;
-
-        const body = (
-            m.message.conversation || 
-            m.message.extendedTextMessage?.text || 
-            m.message.imageMessage?.caption || 
-            m.message.videoMessage?.caption || 
-            m.message.buttonsResponseMessage?.selectedButtonId || 
-            m.message.listResponseMessage?.singleSelectReply?.selectedRowId || 
-            m.message.templateButtonReplyMessage?.selectedId || ""
-        ).trim();
-
-        const prefixes = config.allPrefixes || ['#', '!', '.'];
-        const foundPrefix = prefixes.find(p => body.startsWith(p));
-        const usedPrefix = foundPrefix || '';
-
-        const commandName = body.slice(usedPrefix.length).trim().split(/ +/).shift().toLowerCase();
-
-        if (!isGroup && !isRealOwner) {
-            const allowedPrivateCmds = ['code', 'codemood', 'setname', 'setbanner'];
-            if (!allowedPrivateCmds.includes(commandName)) return;
-        }
-
-        const isNoPrefixCmd = Array.from(global.commands.values()).some(cmd => 
-            cmd.noPrefix && (
-                body.toLowerCase().startsWith(cmd.name.toLowerCase()) || 
-                (cmd.alias && cmd.alias.some(a => body.toLowerCase().startsWith(a.toLowerCase())))
-            )
-        );
-
-        if (m.key.fromMe && !foundPrefix && !isNoPrefixCmd) return;
 
         global.lastMessageMap.set(m.sender, Date.now());
-
         m.reply = async (text) => conn.sendMessage(m.chat, { text }, { quoted: m });
-
-        m.download = async () => {
-            return await downloadMediaMessage(m, 'buffer', {}, { logger: P({ level: 'silent' }) });
-        };
+        m.download = async () => downloadMediaMessage(m, 'buffer', {}, { logger: P({ level: 'silent' }) });
 
         const msgType = Object.keys(m.message)[0];
-        const msgContent = m.message[msgType];
-        const contextInfo = msgContent?.contextInfo;
+        const contextInfo = m.message[msgType]?.contextInfo;
 
         if (contextInfo?.quotedMessage) {
             const type = Object.keys(contextInfo.quotedMessage)[0];
             const q = contextInfo.quotedMessage[type];
             m.quoted = {
-                type, 
-                msg: q, 
-                id: contextInfo.stanzaId,
-                mimetype: q?.mimetype || '',
+                type, msg: q, id: contextInfo.stanzaId, mimetype: q?.mimetype || '',
+                sender: contextInfo.participant,
                 text: q?.text || q?.caption || contextInfo.quotedMessage.conversation || '',
                 key: {
                     remoteJid: m.chat,
                     fromMe: contextInfo.participant === (conn.user.id.split(':')[0] + '@s.whatsapp.net'),
-                    id: contextInfo.stanzaId,
-                    participant: contextInfo.participant
+                    id: contextInfo.stanzaId, participant: contextInfo.participant
                 },
                 message: contextInfo.quotedMessage,
-                download: async () => {
-                    const quotedMsg = { message: contextInfo.quotedMessage };
-                    return await downloadMediaMessage(quotedMsg, 'buffer', {}, { logger: P({ level: 'silent' }) });
-                }
+                download: async () => downloadMediaMessage({ message: contextInfo.quotedMessage }, 'buffer', {}, { logger: P({ level: 'silent' }) })
             };
         } else {
             m.quoted = null;
@@ -318,10 +214,19 @@ async function startBot() {
 
         logger(m, conn);
         await antiLinkHandler(conn, m);
+
         await pixelHandler(conn, m, config);
 
-        await database.saveUser(m.sender, global.db.data.users[m.sender]);
-        if (isGroup) await database.saveChat(m.chat, global.db.data.chats[m.chat]);
+        try {
+            if (global.db.data.users[m.sender]) {
+                await database.saveUser(m.sender, global.db.data.users[m.sender]);
+            }
+            if (isGroup && global.db.data.chats[m.chat]) {
+                await database.saveChat(m.chat, global.db.data.chats[m.chat]);
+            }
+        } catch (dbErr) {
+            console.error(dbErr);
+        }
     });
 }
 
