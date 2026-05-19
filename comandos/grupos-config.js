@@ -3,9 +3,11 @@ import { database } from '../database.js';
 const configCommand = {
     name: 'welcome',
     alias: ['antilink', 'detect', 'setup', 'config'],
+    category: 'grupos',
+    desc: 'Configura el grupo con on/off',
     noPrefix: true,
 
-    run: async (conn, m, args) => {
+    run: async (conn, m, args, usedPrefix, commandName, text) => {
         if (!m.chat.endsWith('@g.us')) {
             return m.reply('Este comando solo se puede usar en grupos.');
         }
@@ -17,12 +19,12 @@ const configCommand = {
 
         let dbChat = await database.getChat(m.chat);
         if (!dbChat) {
-            dbChat = { welcome: true, antilink: true, detect: true };
+            dbChat = { welcome: 1, antilink: 1, detect: 1 };
             await database.saveChat(m.chat, dbChat);
         }
 
-        const body = (m.message.conversation || m.message.extendedTextMessage?.text || "").toLowerCase();
-        
+        const body = (m.message?.conversation || m.message?.extendedTextMessage?.text || "").toLowerCase();
+
         let feature;
         let action;
 
@@ -38,9 +40,9 @@ const configCommand = {
         }
 
         if (!['welcome', 'antilink', 'detect'].includes(feature)) {
-            const statusWelcome = dbChat.welcome ? 'Activado' : 'Desactivado';
-            const statusAntilink = dbChat.antilink ? 'Activado' : 'Desactivado';
-            const statusDetect = dbChat.detect ? 'Activado' : 'Desactivado';
+            const statusWelcome = dbChat.welcome === 1 ? 'Activado' : 'Desactivado';
+            const statusAntilink = dbChat.antilink === 1 ? 'Activado' : 'Desactivado';
+            const statusDetect = dbChat.detect === 1 ? 'Activado' : 'Desactivado';
 
             let txt = `*✿︎ \`CONFIGURACIÓN DEL GRUPO\` ✿︎*\n\n`;
             txt += `» 👋 *Welcome:* ${statusWelcome}\n`;
@@ -55,18 +57,17 @@ const configCommand = {
             return m.reply(`*✿︎ \`ESTADO INCORRECTO\` ✿︎*\n\n» Para entender este comando, usa *off* para desactivar y *on* para activar.\n\n> ✰ Ejemplo: *#${feature} on*`);
         }
 
-        const isTrue = action === 'on';
+        const intValue = action === 'on' ? 1 : 0;
 
-        if (dbChat[feature] === isTrue) {
-            return m.reply(`*✿︎* La función *${feature}* ya se encuentra ${isTrue ? '*activada*' : '*desactivada*'}.`);
+        if (dbChat[feature] === intValue) {
+            return m.reply(`*✿︎* La función *${feature}* ya se encuentra ${intValue === 1 ? '*activada*' : '*desactivada*'}.`);
         }
 
-        dbChat[feature] = isTrue;
+        dbChat[feature] = intValue;
         await database.saveChat(m.chat, dbChat);
-        global.db.data.chats[m.chat] = { ...global.db.data.chats[m.chat], ...dbChat };
 
         let res = `*✿︎ \`CONFIG UPDATE\` ✿︎*\n\n`;
-        res += `» Haz ${isTrue ? 'Activado' : 'Desactivado'} la función *${feature.toUpperCase()}*\n\n`;
+        res += `» Has ${intValue === 1 ? 'Activado' : 'Desactivado'} la función *${feature.toUpperCase()}*\n\n`;
         res += `> ✰ Cambio aplicado correctamente por el administrador.`;
 
         return m.reply(res);
