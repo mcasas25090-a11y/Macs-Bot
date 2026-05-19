@@ -7,31 +7,37 @@ const gachaPath = path.resolve('./config/database/gacha/gacha_list.json');
 const baseGroup = "120363423871589037@g.us";
 
 const claimCommand = {
-    name: 'claim',
-    alias: ['reclamar', 'c'],
+    name: 'claimcharacter',
+    alias: ['reclamar', 'c', 'domar'],
     category: 'gacha',
     desc: 'Reclama un personaje disponible en el grupo utilizando tus coins.',
     noPrefix: true,
     isGroup: true,
 
-    run: async (conn, m, args) => {
+    run: async (conn, m, args, usedPrefix, commandName, text) => {
         try {
             const group = m.chat;
-            const userJid = m.sender.replace(/:.*@/g, '@');
+            const userJid = m.sender;
             const ahora = new Date();
             const tiempoEspera = 9 * 60 * 1000;
 
-            let userDb = await database.getUser(userJid);
-            if (!userDb) userDb = { jid: userJid, wallet: 0, last_claim: new Date(0) };
+            let userDb = global.db.data.users[userJid];
+            if (!userDb) {
+                userDb = await database.getUser(userJid);
+            }
 
-            const lastClaim = new Date(userDb.last_claim).getTime();
-            const tiempoPasado = ahora.getTime() - lastClaim;
+            if (!userDb) {
+                userDb = { wallet: 0, bank: 0, genre: 'No definido', marry: null, last_claim: '1970-01-01T00:00:00.000Z', last_crime: '1970-01-01T00:00:00.000Z', last_work: '1970-01-01T00:00:00.000Z', last_slut: '1970-01-01T00:00:00.000Z', last_flip: '1970-01-01T00:00:00.000Z', last_rob: '1970-01-01T00:00:00.000Z', last_rw: '1970-01-01T00:00:00.000Z', last_claim_pj: '1970-01-01T00:00:00.000Z' };
+            }
+
+            const lastClaimTime = new Date(userDb.last_claim_pj || '1970-01-01T00:00:00.000Z').getTime();
+            const tiempoPasado = ahora.getTime() - lastClaimTime;
 
             if (tiempoPasado < tiempoEspera) {
                 const faltante = tiempoEspera - tiempoPasado;
-                const minutos = Math.floor(faltante / 60000);
-                const segundos = Math.floor((faltante % 60000) / 1000);
-                return m.reply(`*${config.visuals.emoji2}* ¡Espera! Debes esperar **${minutos}m ${segundos}s** para reclamar otro personaje.`);
+                const minutes = Math.floor(faltante / 60000);
+                const seconds = Math.floor((faltante % 60000) / 1000);
+                return m.reply(`*${config.visuals.emoji2}* ¡Espera! Debes esperar **${minutes}m ${seconds}s** antes de reclamar otro personaje.`);
             }
 
             if (!fs.existsSync(gachaPath)) return m.reply('Error: Base de datos gacha no encontrada.');
@@ -39,42 +45,62 @@ const claimCommand = {
             const plantillaPersonajes = rawData[baseGroup];
 
             let pjId = null;
-            if (args[0] && !isNaN(args[0])) {
+
+            // 1. Intentar por argumento de texto directo (.c 14)
+            if (args && args[0] && !isNaN(args[0])) {
                 pjId = args[0];
-            } else if (m.quoted) {
+            } 
+            // 2. Si cita un mensaje
+            else if (m.quoted) {
+                // Comprobación A: Buscar en la memoria global
                 const chatRolls = global.db.data.chats[group]?.rolls;
                 if (chatRolls && chatRolls[m.quoted.id]) {
-                    pjId = chatRolls[m.quoted.id].id;
+                    if (ahora.getTime() < chatRolls[m.quoted.id].expiresAt) {
+                        pjId = chatRolls[m.quoted.id].id;
+                    }
+                }
+
+                // Comprobación B: Forzar lectura del texto citado (Extremadamente flexible)
+                const quotedText = m.quoted.text || m.quoted.caption || '';
+                if (!pjId && quotedText) {
+                    // Esta expresión regular busca "ID", cualquier símbolo intermedio como » o : y luego captura los números sueltos
+                    const matchId = quotedText.match(/ID[\s\S]*?(\d+)/i);
+                    if (matchId) {
+                        pjId = matchId[1];
+                    }
                 }
             }
 
             if (!pjId || !plantillaPersonajes[pjId]) {
-                return m.reply(`*${config.visuals.emoji2}* Cita el mensaje del personaje que deseas reclamar.`);
-            }
-
-            const infoGrupo = await database.getCharacterOwner(group, pjId);
-            if (infoGrupo && infoGrupo.status !== 'libre') {
-                return m.reply(`*${config.visuals.emoji2}* ¡Este personaje ya tiene dueño!`);
+                return m.reply(`*${config.visuals.emoji2}* No encontré un personaje válido. Cita el mensaje del roll o escribe su ID directamente (Ej: .c 25)`);
             }
 
             const pjPlantilla = plantillaPersonajes[pjId];
-            const saldo = parseInt(userDb.wallet || 0);
 
-            if (saldo < pjPlantilla.value) {
-                return m.reply(`*${config.visuals.emoji2}* No tienes suficiente dinero (¥${pjPlantilla.value.toLocaleString()}) en tu cartera.`);
+            const infoPj = await database.getCharacterOwner(group, pjId);
+            if (infoPj && infoPj.status !== 'libre') {
+                const duenoJid = infoPj.user_jid;
+                return conn.sendMessage(m.chat, {
+                    text: `*${config.visuals.emoji2}* ¡Demasiado tarde! *${pjPlantilla.name}* ya tiene dueño y le pertenece a @${duenoJid.split('@')[0]}.`,
+                    mentions: [duenoJid]
+                }, { quoted: m });
             }
 
-            userDb.wallet = saldo - pjPlantilla.value;
-            userDb.last_claim = ahora;
+            const wallet = Number(userDb.wallet || 0);
+
+            if (wallet < pjPlantilla.value) {
+                return m.reply(`*${config.visuals.emoji2}* No tienes suficiente dinero en tu billetera. Necesitas $${pjPlantilla.value.toLocaleString()} coins.`);
+            }
+
+            userDb.wallet = wallet - pjPlantilla.value;
+            userDb.last_claim_pj = ahora.toISOString();
+
+            global.db.data.users[userJid] = userDb;
 
             await database.claimCharacter(group, userJid, pjId);
             await database.saveUser(userJid, userDb);
 
-            if (m.quoted && global.db.data.chats[group]?.rolls) {
-                delete global.db.data.chats[group].rolls[m.quoted.id];
-            }
-
-            m.reply(`*${config.visuals.emoji3}* ¡Felicidades! Has domado a *${pjPlantilla.name}* por ¥${pjPlantilla.value.toLocaleString()}.`);
+            return m.reply(`*${config.visuals.emoji3}* ¡Felicidades! Has domado a *${pjPlantilla.name}* por $${pjPlantilla.value.toLocaleString()} coins.`);
 
         } catch (e) {
             console.error(e);
