@@ -1,10 +1,11 @@
 import { config } from '../config.js';
+import { database } from '../database.js';
 
 const removeCoins = {
     name: 'removecoins',
     alias: ['quitarcoins', 'delcoins', 'removerdinero'],
     category: 'owner',
-    desc: 'Confisca monedas de un usuario de su cartera y banco.',
+    desc: 'Confisca monedas de un usuario de su cartera y banco de forma exacta o total.',
     isOwner: true,
     noPrefix: true,
 
@@ -17,54 +18,74 @@ const removeCoins = {
                 return m.reply(`*${config.visuals.emoji2}* \`ACCESO DENEGADO\`\n\nEste comando solo puede ser ejecutado por mi creador.`);
             }
 
-            let rawTarget = m.quoted ? m.quoted.sender || m.quoted.key.participant || m.quoted.key.remoteJid : m.mentionedJid?.[0];
+            let who;
+            if (m.quoted && m.quoted.sender) {
+                who = m.quoted.sender;
+            } else if (m.mentionedJid && m.mentionedJid[0]) {
+                who = m.mentionedJid[0];
+            }
 
-            if (!rawTarget) {
+            if (!who) {
                 return m.reply(`*${config.visuals.emoji2}* \`Usuario Requerido\`\n\nMenciona a alguien o responde a su mensaje.`);
             }
 
-            const targetJid = rawTarget.replace(/:.*@/g, '@');
-            const userDb = global.db.data.users[targetJid];
-            const userId = targetJid.split('@')[0];
-
-            if (!userDb || ((userDb.wallet || 0) + (userDb.bank || 0)) <= 0) {
-                return m.reply(`*${config.visuals.emoji2}* \`Usuario Sin Fondos\`\n\n@${userId} no tiene dinero para confiscar.`, { mentions: [targetJid] });
+            let victim = global.db.data.users[who];
+            if (!victim) {
+                victim = await database.getUser(who);
             }
 
-            const isAll = args.some(arg => arg.toLowerCase() === 'all' || arg.toLowerCase() === 'todo');
-            const montoInput = parseInt(args.find(arg => !isNaN(arg) && !arg.includes('@')));
-
-            if (!isAll && (!montoInput || montoInput <= 0)) {
-                return m.reply(`*${config.visuals.emoji2}* \`Monto Inválido\`\n\nIngresa una cantidad o usa *all*.`);
+            if (!victim) {
+                victim = { wallet: 0, bank: 0, genre: 'No definido', marry: null, last_claim: '1970-01-01T00:00:00.000Z', last_crime: '1970-01-01T00:00:00.000Z', last_work: '1970-01-01T00:00:00.000Z', last_slut: '1970-01-01T00:00:00.000Z', last_flip: '1970-01-01T00:00:00.000Z', last_rob: '1970-01-01T00:00:00.000Z' };
             }
 
-            let wallet = userDb.wallet || 0;
-            let bank = userDb.bank || 0;
+            let wallet = victim.wallet || 0;
+            let bank = victim.bank || 0;
             let totalDisponible = wallet + bank;
+            const userId = who.split('@')[0];
+
+            if (totalDisponible <= 0) {
+                return m.reply(`*${config.visuals.emoji2}* \`Usuario Sin Fondos\`\n\n@${userId} no tiene dinero en efectivo ni en el banco para confiscar.`, { mentions: [who] });
+            }
+
+            const amountArg = args.find(arg => !arg.includes('@'));
+            if (!amountArg) {
+                return m.reply(`*${config.visuals.emoji2}* Especifica la cantidad o usa la palabra *all*.`);
+            }
+
+            const isAll = amountArg.toLowerCase() === 'all' || amountArg.toLowerCase() === 'todo';
+            let montoInput = parseInt(amountArg.replace(/[^0-9]/g, ''));
+
+            if (!isAll && (isNaN(montoInput) || montoInput <= 0)) {
+                return m.reply(`*${config.visuals.emoji2}* \`Monto Inválido\`\n\nIngresa una cantidad numérica o usa *all*.`);
+            }
+
             let retiradoReal = 0;
 
             if (isAll) {
                 retiradoReal = totalDisponible;
-                userDb.wallet = 0;
-                userDb.bank = 0;
+                victim.wallet = 0;
+                victim.bank = 0;
             } else {
                 retiradoReal = Math.min(totalDisponible, montoInput);
                 let restante = retiradoReal;
 
-                if (userDb.wallet >= restante) {
-                    userDb.wallet -= restante;
+                if (wallet >= restante) {
+                    victim.wallet = wallet - restante;
                 } else {
-                    restante -= (userDb.wallet || 0);
-                    userDb.wallet = 0;
-                    userDb.bank = Math.max(0, (userDb.bank || 0) - restante);
+                    restante -= wallet;
+                    victim.wallet = 0;
+                    victim.bank = Math.max(0, bank - restante);
                 }
             }
 
-            const texto = `*${config.visuals.emoji3}* \`SANCIÓN ECONÓMICA\` *${config.visuals.emoji3}*\n\n*❁ Usuario:* @${userId}\n*❁ Monto Retirado:* \`¥${retiradoReal.toLocaleString()}\` ${isAll ? '*(TODO)*' : ''}\n\n*${config.visuals.emoji} Cartera:* ¥${(userDb.wallet || 0).toLocaleString()}\n*${config.visuals.emoji4} Banco:* ¥${(userDb.bank || 0).toLocaleString()}\n\n> Los fondos han sido confiscados correctamente.`;
+            global.db.data.users[who] = victim;
+            await database.saveUser(who, victim);
+
+            const texto = `*${config.visuals.emoji3}* \`SANCIÓN ECONÓMICA\` *${config.visuals.emoji3}*\n\n*❁ Autoridad:* @${senderNumber}\n*❁ Usuario Sancionado:* @${userId}\n*❁ Monto Confiscado:* \`¥${retiradoReal.toLocaleString()}\` ${isAll ? '*(TOTAL)*' : ''}\n\n*${config.visuals.emoji} Cartera Restante:* ¥${(victim.wallet || 0).toLocaleString()}\n*${config.visuals.emoji4} Banco Restante:* ¥${(victim.bank || 0).toLocaleString()}\n\n> Los fondos del balance global han sido actualizados con éxito.`;
 
             await conn.sendMessage(m.chat, { 
                 text: texto, 
-                mentions: [targetJid] 
+                mentions: [who] 
             }, { quoted: m });
 
         } catch (e) {
