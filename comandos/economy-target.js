@@ -1,6 +1,7 @@
 import fs from 'fs-extra';
 import path from 'path';
 import { config } from '../config.js';
+import { database } from '../database.js';
 
 const targetsFolder = path.resolve('./jsons/targets');
 
@@ -12,17 +13,16 @@ const claimCard = {
     isGroup: true,
     noPrefix: true,
 
-    run: async (conn, m, args) => {
+    run: async (conn, m, { args }) => {
         try {
-            const user = m.sender.replace(/:.*@/g, '@');
+            const userJid = m.sender;
             const inputCode = args[0];
 
             if (!inputCode) {
-                return m.reply(`*${config.visuals.emoji2}* \`Falta Código\`\n\nPor favor, ingresa el código de tu tarjeta.\n\n> Ejemplo: #target KZM-XXXX`);
+                return m.reply(`*${config.visuals.emoji2}* \`Falta Código\`\n\nIngresa el código. Ejemplo: #target KZM-XXXX`);
             }
 
             await fs.ensureDir(targetsFolder);
-
             const cardPath = path.join(targetsFolder, `${inputCode}.json`);
 
             if (!await fs.pathExists(cardPath)) {
@@ -32,12 +32,15 @@ const claimCard = {
             const cardData = await fs.readJson(cardPath);
             const monto = Number(cardData.monto);
 
-            if (!global.db.data.users[user]) global.db.data.users[user] = { bank: 0 };
-            const userDb = global.db.data.users[user];
+            let userDb = await database.getUser(userJid);
+            if (!userDb) {
+                userDb = { wallet: 0, bank: 0, genre: 'No definido', marry: null, last_claim: new Date(0).toISOString() };
+            }
 
-            userDb.bank = (userDb.bank || 0) + monto;
+            userDb.bank = Number(userDb.bank || 0) + monto;
 
             await fs.remove(cardPath);
+            await database.saveUser(userJid, userDb);
 
             let texto = `*${config.visuals.emoji3}* \`TARJETA RECLAMADA\` *${config.visuals.emoji3}*\n\n`;
             texto += `*❁* Código: \`${inputCode}\`\n`;
