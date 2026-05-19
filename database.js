@@ -1,4 +1,4 @@
-import Database from 'better-sqlite3';
+import sqlite3 from 'sqlite3'; const Database = sqlite3.Database;
 import { join } from 'path';
 
 const db = new Database(join(process.cwd(), 'database.db'));
