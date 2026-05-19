@@ -1,47 +1,53 @@
-import { config } from '../config.js';
+import { database } from '../database.js';
 
 const withdrawCommand = {
     name: 'withdraw',
-    alias: ['ret', 'retirar', 'wd'],
+    alias: ['ret', 'retirar', 'with'],
     category: 'economy',
-    desc: 'Retira una cantidad de dinero de tu banco para pasarlo a tu cartera.',
+    desc: 'Retira tus coins del banco a la billetera.',
     noPrefix: true,
-    isGroup: true,
 
-    run: async (conn, m, args) => {
+    run: async (conn, m, args, usedPrefix, commandName, text) => {
         try {
-            const user = m.sender.replace(/:.*@/g, '@');
-            
-            if (!global.db.data.users[user]) global.db.data.users[user] = { wallet: 0, bank: 0 };
-            const userDb = global.db.data.users[user];
+            const user = global.db.data.users[m.sender];
+            const bank = user.bank || 0;
 
-            const bank = userDb.bank || 0;
-            let amount = args[0];
-
-            if (!amount) return m.reply(`*${config.visuals.emoji2}* \`FALTAN DATOS\`\n\nIngresa una cantidad o usa *all*.\n*Ejemplo:* #ret 5000`);
-
-            if (amount.toLowerCase() === 'all') {
-                amount = bank;
-            } else {
-                amount = parseInt(amount.replace(/[^0-9]/g, ''));
+            if (!args[0]) {
+                return m.reply(`*❁ ¡ERROR DE USO! ❁*\n\n» Especifica una cantidad o escribe *all*.\n» Ejemplo: *${usedPrefix || ''}${commandName} 5000* o *${usedPrefix || ''}${commandName} all*`);
             }
 
-            if (!amount || amount <= 0) return m.reply(`*${config.visuals.emoji2}* Cantidad inválida.`);
-            if (bank < amount) return m.reply(`*${config.visuals.emoji2}* No tienes suficiente dinero en el banco.`);
+            let amount;
+            if (args[0].toLowerCase() === 'all') {
+                amount = bank;
+            } else {
+                amount = parseInt(args[0].replace(/[^0-9]/g, ''));
+            }
 
-            userDb.bank = (userDb.bank || 0) - amount;
-            userDb.wallet = (userDb.wallet || 0) + amount;
+            if (isNaN(amount) || amount <= 0) {
+                return m.reply(`*❁ ¡CANTIDAD INVÁLIDA! ❁*\n\n» Ingresa un número entero mayor a cero o la palabra *all*.`);
+            }
 
-            let texto = `*${config.visuals.emoji3}* \`RETIRO EXITOSO\` *${config.visuals.emoji3}*\n\n`;
-            texto += `*${config.visuals.emoji4} Retirado:* ¥${amount.toLocaleString()}\n`;
-            texto += `*${config.visuals.emoji} Cartera:* ¥${userDb.wallet.toLocaleString()}\n\n`;
-            texto += `> *Banco:* ¥${userDb.bank.toLocaleString()}`;
+            if (bank < amount) {
+                return m.reply(`*❁ \`FONDOS INSUFICIENTES\` ❁*\n\n» No tienes esa cantidad en tu banco.\n» Dispones de: *$${bank.toLocaleString()}* coins.`);
+            }
 
-            await conn.sendMessage(m.chat, { text: texto }, { quoted: m });
+            user.bank = bank - amount;
+            user.wallet = (user.wallet || 0) + amount;
+
+            await database.saveUser(m.sender, user);
+
+            let txt = `*❁ \`RETIRO EXITOSO\` ❁*\n\n`;
+            txt += `» Has retirado tus coins para usarlos libremente.\n`;
+            txt += `*❀ Retirado »* $${amount.toLocaleString()} coins\n`;
+            txt += `*✿ En Banco »* $${user.bank.toLocaleString()} coins\n`;
+            txt += `*✰ En Billetera »* $${user.wallet.toLocaleString()} coins\n\n`;
+            txt += `> ✰ Recuerda que en la billetera quedas expuesto a robos.`;
+
+            return m.reply(txt);
 
         } catch (e) {
             console.error(e);
-            m.reply(`*${config.visuals.emoji2}* Error en el retiro.`);
+            m.reply('Ocurrió un error interno al procesar el comando.');
         }
     }
 };
