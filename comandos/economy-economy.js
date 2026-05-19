@@ -1,72 +1,76 @@
-import { config } from '../config.js';
+import { database } from '../database.js';
 
 const economyInfoCommand = {
     name: 'economy',
-    alias: ['ecoinfo', 'einfo', 'ainfo'],
+    alias: ['einfo', 'ecoinfo'],
     category: 'economy',
-    desc: 'Consulta los tiempos de espera y el balance total de un usuario.',
+    desc: 'Muestra el tiempo transcurrido desde el último uso de los comandos.',
     noPrefix: true,
 
-    run: async (conn, m) => {
+    run: async (conn, m, args, usedPrefix, commandName, text) => {
         try {
-            let rawJid = m.sender;
-            if (m.message?.extendedTextMessage?.contextInfo?.mentionedJid?.[0]) {
-                rawJid = m.message.extendedTextMessage.contextInfo.mentionedJid[0];
-            } else if (m.quoted) {
-                rawJid = m.quoted.key.participant || m.quoted.key.remoteJid;
+            let who;
+            if (m.isGroup) {
+                who = m.mentionedJid && m.mentionedJid[0] ? m.mentionedJid[0] : (m.quoted && m.quoted.sender ? m.quoted.sender : m.sender);
+            } else {
+                who = m.quoted && m.quoted.sender ? m.quoted.sender : m.sender;
             }
 
-            const targetJid = rawJid.replace(/:.*@/g, '@');
-            const userDb = global.db.data.users[targetJid];
-            
-            if (!userDb) {
-                return m.reply(`*${config.visuals.emoji2}* El usuario no tiene registros económicos.`);
+            let user = global.db.data.users[who];
+            if (!user) {
+                user = await database.getUser(who);
             }
 
-            const userId = targetJid.split('@')[0];
-            const ahora = Date.now();
+            if (!user) {
+                return m.reply('*❁ ¡ERROR! ❁*\n\n» El usuario no está registrado en la base de datos.');
+            }
 
-            const formatTime = (lastUsed) => {
-                if (!lastUsed || lastUsed === 0) return "*nunca*";
-                const diff = ahora - lastUsed;
-                const segundos = Math.floor(diff / 1000);
-                const minutos = Math.floor(segundos / 60);
-                const horas = Math.floor(minutos / 60);
-                const dias = Math.floor(horas / 24);
+            const userId = who.split('@')[0];
+            const now = Date.now();
 
-                if (dias > 0) return `hace *${dias}d*`;
-                if (horas > 0) return `hace *${horas}h*`;
-                if (minutos > 0) return `hace *${minutos}m*`;
-                return `hace *${segundos}s*`;
+            const formatTimeAgo = (lastTimeIso) => {
+                if (!lastTimeIso || lastTimeIso === '1970-01-01T00:00:00.000Z') return 'Nunca';
+                
+                const lastTime = new Date(lastTimeIso).getTime();
+                const difference = now - lastTime;
+                
+                if (difference < 0) return 'Hace un momento';
+
+                const seconds = Math.floor(difference / 1000);
+                const minutes = Math.floor(seconds / 60);
+                const hours = Math.floor(minutes / 60);
+                const days = Math.floor(hours / 24);
+
+                if (days > 0) return `Hace ${days}d`;
+                if (hours > 0) return `Hace ${hours}h`;
+                if (minutes > 0) return `Hace ${minutes}m`;
+                return `Hace ${seconds}s`;
             };
 
-            const dailyTime = formatTime(userDb.daily?.lastClaim);
-            const workTime = formatTime(userDb.lastWork);
-            const crimeTime = formatTime(userDb.lastCrime);
-            const slutTime = formatTime(userDb.lastSlut);
+            const dailyFmt = formatTimeAgo(user.last_claim);
+            const crimeFmt = formatTimeAgo(user.last_crime);
+            const workFmt = formatTimeAgo(user.last_work);
+            const slutFmt = formatTimeAgo(user.last_slut);
 
-            const wallet = userDb.wallet || 0;
-            const bank = userDb.bank || 0;
+            const wallet = user.wallet || 0;
+            const bank = user.bank || 0;
             const totalCoins = wallet + bank;
 
-            let message = `*${config.visuals.emoji3}* \`ESTADÍSTICAS GLOBALES\` *${config.visuals.emoji3}*\n\n`;
+            let message = `*❁* \`ESTADÍSTICAS GLOBALES\` *❁*\n\n`;
             message += `› @${userId}\n\n`;
-            message += `ⴵ Daily » ${dailyTime}\n`;
-            message += `ⴵ Work » ${workTime}\n`;
-            message += `ⴵ Crime » ${crimeTime}\n`;
-            message += `ⴵ Slut » ${slutTime}\n\n`;
-            message += `*⛁* Coins totales » *¥${totalCoins.toLocaleString()}*`;
+            message += `ⴵ Daily » ${dailyFmt}\n`;
+            message += `ⴵ Work » ${workFmt}\n`;
+            message += `ⴵ Crime » ${crimeFmt}\n`;
+            message += `ⴵ Slut » ${slutFmt}\n\n`;
+            message += `*⛁* Coins totales » *$${totalCoins.toLocaleString()}*`;
 
-            await conn.sendMessage(m.chat, { 
-                text: message,
-                mentions: [targetJid]
-            }, { quoted: m });
+            return conn.sendMessage(m.chat, { text: message, mentions: [who] }, { quoted: m });
 
         } catch (e) {
             console.error(e);
-            m.reply(`*${config.visuals.emoji2}* Error al obtener la información económica.`);
+            m.reply('Ocurrió un error interno al procesar el comando.');
         }
     }
 };
 
-export default economyInfoCommand;
+export default economyInfoCommand;;
