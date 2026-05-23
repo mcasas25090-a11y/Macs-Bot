@@ -23,7 +23,7 @@ const closeGroup = {
             }
 
             await conn.groupSettingUpdate(m.chat, 'announcement');
-            
+
             m.reply(`*${config.visuals.emoji3} \`GRUPO CERRADO\` ${config.visuals.emoji3}*\n\nSe ha activado el modo restrictivo. Solo los administradores pueden enviar mensajes.\n\n> ¡Momento de silencio en el servidor!`);
         } catch (e) {
             m.reply(`*${config.visuals.emoji2}* Error al intentar cerrar el grupo.`);
