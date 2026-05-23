@@ -172,7 +172,7 @@ async function startBot() {
 
         let dbUser = await database.getUser(m.sender);
         if (!dbUser) {
-            dbUser = { wallet: 0, bank: 0, genre: 'No definido', marry: null, last_claim: '1970-01-01T00:00:00.000Z', last_crime: '1970-01-01T00:00:00.000Z', last_work: '1970-01-01T00:00:00.000Z', last_slut: '1970-01-01T00:00:00.000Z', last_flip: '1970-01-01T00:00:00.000Z', last_rob: '1970-01-01T00:00:00.000Z' };
+            dbUser = { wallet: 0, bank: 0, genre: 'No definido', marry: null, last_claim: new Date().toISOString() };
             await database.saveUser(m.sender, dbUser);
         }
         global.db.data.users[m.sender] = dbUser;
@@ -198,7 +198,6 @@ async function startBot() {
             const q = contextInfo.quotedMessage[type];
             m.quoted = {
                 type, msg: q, id: contextInfo.stanzaId, mimetype: q?.mimetype || '',
-                sender: contextInfo.participant,
                 text: q?.text || q?.caption || contextInfo.quotedMessage.conversation || '',
                 key: {
                     remoteJid: m.chat,
@@ -214,16 +213,11 @@ async function startBot() {
 
         logger(m, conn);
         await antiLinkHandler(conn, m);
-
         await pixelHandler(conn, m, config);
 
         try {
-            if (global.db.data.users[m.sender]) {
-                await database.saveUser(m.sender, global.db.data.users[m.sender]);
-            }
-            if (isGroup && global.db.data.chats[m.chat]) {
-                await database.saveChat(m.chat, global.db.data.chats[m.chat]);
-            }
+            await database.saveUser(m.sender, global.db.data.users[m.sender]);
+            if (isGroup) await database.saveChat(m.chat, global.db.data.chats[m.chat]);
         } catch (dbErr) {
             console.error(dbErr);
         }
