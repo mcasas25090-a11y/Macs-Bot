@@ -1,47 +1,61 @@
+import { config } from '../config.js';
 import { database } from '../database.js';
 import { workFrases } from './frases/work.js';
 
 const workCommand = {
     name: 'work',
-    alias: ['w', 'trabajar', 'chamba'],
+    alias: ['chamba', 'trabajar', 'w'],
     category: 'economy',
-    desc: 'Realiza un trabajo del mundo real para ganar coins.',
+    desc: 'Realiza trabajos honrados para ganar coins.',
     noPrefix: true,
+    isGroup: true,
 
-    run: async (conn, m, args, usedPrefix, commandName, text) => {
+    run: async (conn, m) => {
         try {
-            const user = global.db.data.users[m.sender];
-            const now = new Date();
-            const lastWork = new Date(user.last_work || '1970-01-01T00:00:00.000Z');
+            const userJid = m.sender;
+            const ahora = Date.now();
+            const cooldown = 5 * 60 * 1000;
 
-            const difference = now - lastWork;
-            const cooldownTime = 5 * 60 * 1000;
-
-            if (difference < cooldownTime) {
-                const timeLeft = cooldownTime - difference;
-                const minutes = Math.floor(timeLeft / (1000 * 60));
-                const seconds = Math.floor((timeLeft % (1000 * 60)) / 1000);
-                return m.reply(`*❁ ¡ESPERA UN MOMENTO! ❁*\n\n» Debes esperar *${minutes}m ${seconds}s* antes de volver a trabajar.`);
+            let userDb = await database.getUser(userJid);
+            if (!userDb) {
+                userDb = { 
+                    wallet: 0, 
+                    bank: 0, 
+                    genre: 'No definido', 
+                    marry: null, 
+                    last_claim: new Date(0).toISOString(),
+                    lastWork: 0 
+                };
             }
 
-            user.last_work = now.toISOString();
+            const tiempoPasado = ahora - (Number(userDb.lastWork) || 0);
 
+            if (tiempoPasado < cooldown) {
+                const restante = cooldown - tiempoPasado;
+                const minutos = Math.floor(restante / 60000);
+                const segundos = Math.floor((restante % 60000) / 1000);
+
+                let tiempoTexto = minutos > 0 ? `${minutos}m ${segundos}s` : `${segundos}s`;
+                return m.reply(`*${config.visuals.emoji2}* \`DESCANSO\`\n\n> Debes esperar **${tiempoTexto}** para volver a chambear.`);
+            }
+
+            const recompensa = Math.floor(Math.random() * (5000 - 2000 + 1)) + 2000;
             const frase = workFrases[Math.floor(Math.random() * workFrases.length)];
-            const reward = Math.floor(Math.random() * (12000 - 5000 + 1)) + 5000;
 
-            user.wallet = (user.wallet || 0) + reward;
-            await database.saveUser(m.sender, user);
+            userDb.wallet = Number(userDb.wallet || 0) + recompensa;
+            userDb.lastWork = ahora;
 
-            let txt = `*❁ \`JORNADA LABORAL\` ❁*\n\n`;
-            txt += `» ${frase}\n`;
-            txt += `*✰ Ganaste »* $${reward.toLocaleString()} coins\n\n`;
-            txt += `> ✿ El esfuerzo rinde frutos, ¡sigue trabajando duro!`;
+            let texto = `*${config.visuals.emoji3}* \`CHAMBA EXITOSA\` *${config.visuals.emoji3}*\n\n`;
+            texto += `${frase}\n`;
+            texto += `*${config.visuals.emoji} Ganaste:* ¥${recompensa.toLocaleString()}\n\n`;
+            texto += `> *Cartera:* ¥${userDb.wallet.toLocaleString()}`;
 
-            return m.reply(txt);
+            await database.saveUser(userJid, userDb);
+            await conn.sendMessage(m.chat, { text: texto }, { quoted: m });
 
         } catch (e) {
             console.error(e);
-            m.reply('Ocurrió un error interno al procesar el comando.');
+            m.reply(`*${config.visuals.emoji2}* Error al procesar la chamba.`);
         }
     }
 };
