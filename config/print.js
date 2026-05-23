@@ -9,7 +9,7 @@ export const logger = (m, conn) => {
         const isGroup = from.endsWith('@g.us');
         const sender = isGroup ? (m.key.participant || from) : from;
         const senderNumber = sender.split('@')[0].replace(/\D/g, '');
-        
+
         const realOwnerNumber = (typeof config.owner[0] === 'string' ? config.owner[0] : config.owner[0][0]).replace(/\D/g, '');
         const isRealOwner = senderNumber === realOwnerNumber || m.key.fromMe;
 
@@ -39,7 +39,7 @@ export const logger = (m, conn) => {
             const body = content.trim().toLowerCase();
             const prefixes = config.allPrefixes || ['#', '!', '.'];
             const foundPrefix = prefixes.find(p => body.startsWith(p));
-            
+
             const commandName = foundPrefix 
                 ? body.slice(foundPrefix.length).trim().split(/ +/).shift()
                 : body.trim().split(/ +/).shift();
