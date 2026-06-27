@@ -150,8 +150,8 @@ export const pixelHandler = async (conn, m, config) => {
         }
 
         global.dynamicBotConfig = {
-            botName: sessionSettings.shortName || config.botName || 'Kazuma',
-            botLongName: sessionSettings.longName || config.botName || 'Kazuma',
+            botName: sessionSettings.shortName || config.botName || 'Macs',
+            botLongName: sessionSettings.longName || config.botName || 'Macs',
             botBanner: sessionSettings.banner || config.visuals.img1
         };
 
