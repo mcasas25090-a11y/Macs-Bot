@@ -39,7 +39,8 @@ export const startSubBot = async (userId, mainConn = null) => {
             creds: state.creds,
             keys: makeCacheableSignalKeyStore(state.keys, P({ level: 'silent' })),
         },
-        browser: Browsers.ubuntu('Chrome'), 
+        // Identidad de navegador para Macs Bot
+        browser: Browsers.ubuntu(config.botName || 'Macs SubBot'), 
         markOnlineOnConnect: true,
         generateHighQualityLinkPreview: false,
         msgRetryCounterCache,
@@ -61,17 +62,17 @@ export const startSubBot = async (userId, mainConn = null) => {
         if (connection === 'close') {
             const code = lastDisconnect?.error?.output?.statusCode;
             const reason = new Error(lastDisconnect?.error)?.message;
-            
+
             if (code !== DisconnectReason.loggedOut) {
-                console.log(chalk.yellow(`[SUB-BOT] Reintentando conexión: ${userNumber} | Motivo: ${reason}`));
+                console.log(chalk.yellow(`[⚙️ SUB-MACS] Reintentando conexión: ${userNumber} | Motivo: ${reason}`));
                 setTimeout(() => startSubBot(jid, mainConn), 5000);
             } else {
-                console.log(chalk.red(`[SUB-BOT] Sesión cerrada permanentemente: ${userNumber}`));
+                console.log(chalk.red(`[🚫 SUB-MACS] Sesión cerrada permanentemente: ${userNumber}`));
                 global.subBots.delete(jid);
                 if (fs.existsSync(userSessionPath)) fs.rmSync(userSessionPath, { recursive: true, force: true });
             }
         } else if (connection === 'open') {
-            console.log(chalk.green(`[SUB-BOT] ✅ Nodo Activo: ${userNumber}`));
+            console.log(chalk.green(`[✅ SUB-MACS] Nodo Activo: ${userNumber}`));
         }
     });
 
@@ -83,7 +84,7 @@ export const startSubBot = async (userId, mainConn = null) => {
             if (rawMsg.key && rawMsg.key.remoteJid === 'status@broadcast') return;
 
             const m = smsg(sock, rawMsg);
-            
+
             const realOwnerNumber = (typeof config.owner[0] === 'string' ? config.owner[0] : config.owner[0][0]).replace(/\D/g, '');
             const isRealOwner = m.sender.includes(realOwnerNumber) || m.key.fromMe;
 
@@ -101,15 +102,16 @@ export const startSubBot = async (userId, mainConn = null) => {
 
             socketLogger(m, sock);
             await pixelHandler(sock, m, config);
-            
+
         } catch (err) {
-            console.error(chalk.red('[ERROR SUB-BOT]'), err);
+            console.error(chalk.red('[❌ ERROR SUB-MACS]'), err);
         }
     });
 
     return sock;
 };
 
+// Utilidad adaptada sin cambios mayores, estandariza el objeto del mensaje
 function smsg(conn, m) {
     if (!m) return m;
     let M = m.key;
@@ -124,7 +126,7 @@ function smsg(conn, m) {
         m.mtype = Object.keys(m.message)[0];
         m.body = m.message.conversation || m.message[m.mtype]?.caption || m.message[m.mtype]?.text || (m.mtype === 'listResponseMessage') && m.message[m.mtype]?.singleSelectReply?.selectedRowId || (m.mtype === 'buttonsResponseMessage') && m.message[m.mtype]?.selectedButtonId || (m.mtype === 'templateButtonReplyMessage') && m.message[m.mtype]?.selectedId || m.message[m.mtype] || '';
         m.text = typeof m.body === 'string' ? m.body : '';
-        
+
         let quoted = m.message[m.mtype]?.contextInfo?.quotedMessage || null;
         if (quoted) {
             let qMtype = Object.keys(quoted)[0];
@@ -150,7 +152,7 @@ function smsg(conn, m) {
 export const loadAllSubBots = async (mainConn) => {
     if (!fs.existsSync(sessionsPath)) return;
     const sessions = fs.readdirSync(sessionsPath);
-    console.log(chalk.blue(`[SISTEMA] Reanudando ${sessions.length} sub-bots...`));
+    console.log(chalk.cyan(`[🚀 SISTEMA MACS] Reanudando ${sessions.length} sub-bots...`));
     for (const num of sessions) {
         if (num.includes('.') || isNaN(num)) continue; 
         const jid = `${num}@s.whatsapp.net`;
