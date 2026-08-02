@@ -1,5 +1,5 @@
 import { config } from '../config.js';
-import { jidDecode } from 'todleys';
+import { jidDecode } from '@whiskeysockets/baileys';
 
 const inspectCommand = {
     name: 'inspect',
@@ -21,7 +21,7 @@ const inspectCommand = {
         try {
             if (channelRegex.test(targetText)) {
                 const code = targetText.match(channelRegex)[1];
-                
+
                 let meta;
                 try {
                     meta = await conn.newsletterMetadata('invite', code);
