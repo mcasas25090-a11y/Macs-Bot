@@ -1,5 +1,5 @@
 import { config } from '../config.js';
-import axios from 'axios';
+import { ttdl } from 'btch-downloader';
 
 const tiktokDownload = {
     name: 'tiktok',
@@ -17,21 +17,25 @@ const tiktokDownload = {
         await conn.sendMessage(m.chat, { react: { text: '⌛', key: m.key } });
 
         try {
-            const { data: res } = await axios.get(`https://${config.kzmUrl}/api/download/tiktok?url=${link}&apiKey=${config.apiKzm}`);
+            const res = await ttdl(link);
+            const data = Array.isArray(res) ? res[0] : (res?.data || res);
 
-            if (!res.status || !res.data) {
+            const videoUrl = data?.video?.[0] || data?.play || data?.no_watermark || data?.video_hd || data?.url;
+            const title = data?.title || data?.desc || 'TikTok';
+            const author = data?.author?.nickname || data?.author || 'Desconocido';
+
+            if (!videoUrl) {
                 await conn.sendMessage(m.chat, { react: { text: '❌', key: m.key } });
                 return m.reply('Video no encontrado.');
             }
 
-            const { title, author, media } = res.data;
-            let txt = `*${config.visuals.emoji3} TikTok*\n\n📝 ${title}\n👤 ${author.nickname}\n📦 ${media.size}`;
+            const txt = `*${config.visuals.emoji3} TikTok*\n\n📝 ${title}\n👤 ${author}`;
 
-            await conn.sendMessage(m.chat, { video: { url: media.no_watermark }, caption: txt }, { quoted: m });
+            await conn.sendMessage(m.chat, { video: { url: videoUrl }, caption: txt }, { quoted: m });
             await conn.sendMessage(m.chat, { react: { text: '✅', key: m.key } });
         } catch (e) {
             await conn.sendMessage(m.chat, { react: { text: '✖️', key: m.key } });
-            m.reply(`*${config.visuals.emoji2}* Error: ${e.response?.data?.error || e.message}`);
+            m.reply(`*${config.visuals.emoji2}* Error: ${e.message}`);
         }
     }
 };
