@@ -7,7 +7,7 @@ export const moodLogger = (m, conn) => {
 
         const from = m.key.remoteJid;
         const isGroup = from.endsWith('@g.us');
-        const botName = config.botName;
+        const botName = config.botName || 'Macs Bot';
         const name = m.pushName || 'Usuario';
         const sender = isGroup ? (m.key.participant || from) : from;
         const senderNumber = sender.split('@')[0].replace(/\D/g, '');
@@ -23,11 +23,12 @@ export const moodLogger = (m, conn) => {
         else if (type === 'extendedTextMessage') body = m.message.extendedTextMessage?.text || '';
         else body = `[Archivo: ${type.replace('Message', '')}]`;
 
+        // Filtro anti-spam para comandos en privado
         if (!isGroup && !isRealOwner) {
             const text = body.trim().toLowerCase();
             const prefixes = config.allPrefixes || ['#', '!', '.'];
             const foundPrefix = prefixes.find(p => text.startsWith(p));
-            
+
             const commandName = foundPrefix 
                 ? text.slice(foundPrefix.length).trim().split(/ +/).shift()
                 : text.trim().split(/ +/).shift();
@@ -37,23 +38,37 @@ export const moodLogger = (m, conn) => {
         }
 
         const time = new Date().toLocaleTimeString();
-        const boxWidth = 50;
+        const boxWidth = 55; // Ancho total de la caja ajustado
         const line = '═'.repeat(boxWidth);
-        const top = chalk.magenta(`╔${line}╗`);
-        const bottom = chalk.magenta(`╚${line}╝`);
-        const div = chalk.magenta(`╟${'─'.repeat(boxWidth)}╢`);
+        
+        // Diseño Cyan/Tecnológico para Macs Bot
+        const top = chalk.cyan(`╔${line}╗`);
+        const bottom = chalk.cyan(`╚${line}╝`);
+        const div = chalk.cyan(`╟${'─'.repeat(boxWidth)}╢`);
+        const border = chalk.cyan('║');
+
+        // Textos planos para un cálculo de espacios exacto y evitar que la caja se rompa
+        const headerTxt = ` SOCKET: MACS MOOD - ${botName} `;
+        const userTxt = ` USER: ${name.substring(0, 15)} (${senderNumber}) `;
+        const chatTxt = ` CHAT: ${isGroup ? 'Grupo' : 'Privado'} `;
+        const timeTxt = ` TIME: ${time} `;
+        // Limita el tamaño del mensaje para que no rompa la caja
+        const msgTxt = ` MSG:  ${body.substring(0, boxWidth - 10)} `;
 
         console.log(`
 ${top}
-${chalk.magenta('║')} ${chalk.bold.cyan('SOCKET:')} ${chalk.white(`SubMood - ${botName}`)} ${' '.repeat(Math.max(0, boxWidth - 11 - botName.length - 10))}${chalk.magenta('║')}
+${border}${chalk.bold.cyan(headerTxt)}${' '.repeat(Math.max(0, boxWidth - headerTxt.length))}${border}
 ${div}
-${chalk.magenta('║')} ${chalk.yellow('USER:')} ${chalk.white(name.substring(0, 15))} ${chalk.gray(`(${senderNumber})`)} ${' '.repeat(Math.max(0, boxWidth - 8 - name.substring(0, 15).length - senderNumber.length - 4))}${chalk.magenta('║')}
-${chalk.magenta('║')} ${chalk.yellow('CHAT:')} ${chalk.white(isGroup ? 'Grupo' : 'Privado')} ${' '.repeat(boxWidth - 14)}${chalk.magenta('║')}
-${chalk.magenta('║')} ${chalk.yellow('TIME:')} ${chalk.white(time)} ${' '.repeat(boxWidth - 13)}${chalk.magenta('║')}
+${border}${chalk.yellow(userTxt)}${' '.repeat(Math.max(0, boxWidth - userTxt.length))}${border}
+${border}${chalk.yellow(chatTxt)}${' '.repeat(Math.max(0, boxWidth - chatTxt.length))}${border}
+${border}${chalk.yellow(timeTxt)}${' '.repeat(Math.max(0, boxWidth - timeTxt.length))}${border}
 ${div}
-${chalk.magenta('║')} ${chalk.bold.white('MSG:')} ${chalk.italic.green(body.substring(0, boxWidth - 6))} ${' '.repeat(Math.max(0, boxWidth - 5 - body.substring(0, boxWidth - 6).length))}${chalk.magenta('║')}
+${border}${chalk.italic.green(msgTxt)}${' '.repeat(Math.max(0, boxWidth - msgTxt.length))}${border}
 ${bottom}
         `);
 
-    } catch (e) {}
+    } catch (e) {
+        // En caso de error crítico en el log, lo reportamos sin apagar el bot
+        console.error(chalk.red(`  [❌ MACS MOOD Logger Error]: ${e.message}`));
+    }
 };
