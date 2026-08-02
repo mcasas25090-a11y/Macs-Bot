@@ -1,5 +1,5 @@
 import { config } from '../config.js';
-import axios from 'axios';
+import { spotify } from 'btch-downloader';
 
 const spotifyDownload = {
     name: 'spotify',
@@ -14,44 +14,49 @@ const spotifyDownload = {
 
         if (!link) return m.reply(`*${config.visuals.emoji2}* Por favor, proporciona un enlace de Spotify.`);
 
-        if (!link.includes('https://open.spotify.com/track/3xltAYY9fbM1v9DUY2LFdt?si=PN-JKS5wRwKNhCve7kT1Ig')) {
+        if (!link.includes('open.spotify.com')) {
             return m.reply(`*${config.visuals.emoji2}* El enlace no parece ser de Spotify. Verifica la URL.`);
         }
 
         await conn.sendMessage(m.chat, { react: { text: '⌛', key: m.key } });
 
         try {
-            const { data: res } = await axios.get(`https://${config.kzmUrl}/api/download/spotify?url=${encodeURIComponent(link)}&apiKey=${config.apiKzm}`);
+            const res = await spotify(link);
+            const data = Array.isArray(res) ? res[0] : (res?.data || res);
 
-            if (!res.status || !res.result) {
+            const downloadUrl = data?.download || data?.download_url || data?.url;
+            const title = data?.title || 'Desconocido';
+            const artist = data?.artist || data?.artists || 'Desconocido';
+            const thumbnail = data?.image || data?.thumbnail;
+
+            if (!downloadUrl) {
                 await conn.sendMessage(m.chat, { react: { text: '❌', key: m.key } });
-                return m.reply('No se pudo obtener información de este enlace.');
+                return m.reply('No se pudo obtener el audio de este enlace.');
             }
 
-            const data = res.result;
-
             const infoText = `*${config.visuals.emoji3} Spotify Download ${config.visuals.emoji3}*\n\n` +
-                             `*= Título* »\n> ${data.title}\n` +
-                             `*= Artista* »\n> ${data.artist || 'Desconocido'}\n` +
+                             `*= Título* »\n> ${title}\n` +
+                             `*= Artista* »\n> ${artist}\n` +
                              `*= Enlace* »\n> ${link}\n\n` +
                              `_Enviando audio, espera un momento..._`;
 
-            await conn.sendMessage(m.chat, { 
-                image: { url: data.thumbnail }, 
-                caption: infoText 
-            }, { quoted: m });
+            if (thumbnail) {
+                await conn.sendMessage(m.chat, { image: { url: thumbnail }, caption: infoText }, { quoted: m });
+            } else {
+                await m.reply(infoText);
+            }
 
-            await conn.sendMessage(m.chat, { 
-                audio: { url: data.download_url }, 
-                mimetype: 'audio/mp4', 
-                fileName: `${data.title}.mp3` 
+            await conn.sendMessage(m.chat, {
+                audio: { url: downloadUrl },
+                mimetype: 'audio/mp4',
+                fileName: `${title}.mp3`
             }, { quoted: m });
 
             await conn.sendMessage(m.chat, { react: { text: '✅', key: m.key } });
 
         } catch (e) {
             await conn.sendMessage(m.chat, { react: { text: '✖️', key: m.key } });
-            m.reply(`*${config.visuals.emoji2}* Error: ${e.response?.data?.error || e.message}`);
+            m.reply(`*${config.visuals.emoji2}* Error: ${e.message}`);
         }
     }
 };
