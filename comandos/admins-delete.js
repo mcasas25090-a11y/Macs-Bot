@@ -11,26 +11,36 @@ const deleteCommand = {
     run: async (conn, m) => {
         try {
             if (!m.quoted) {
-                return m.reply(`*${config.visuals.emoji2}* Responde al mensaje que deseas eliminar.`);
+                return m.reply(`*${config.visuals.emoji2}* Por favor, responde al mensaje que deseas eliminar.`);
             }
 
-            const { isAdmin } = await conn.getAdminStatus(m.chat, m.sender);
-            if (!isAdmin) {
-                return m.reply(`*${config.visuals.emoji2}* Solo los administradores pueden usar este comando.`);
+            // Obtenemos los privilegios tanto del usuario como del bot
+            const { isAdmin, isBotAdmin } = await conn.getAdminStatus(m.chat, m.sender);
+            
+            // Si el mensaje a borrar no fue enviado por el propio bot, validamos los permisos
+            if (!m.quoted.key.fromMe) {
+                if (!isAdmin) {
+                    return m.reply(`*${config.visuals.emoji2}* Acceso denegado. Solo los administradores pueden usar este comando.`);
+                }
+                if (!isBotAdmin) {
+                    return m.reply(`*${config.visuals.emoji2}* Permisos insuficientes. Necesito ser administrador del grupo para eliminar mensajes de otros usuarios.`);
+                }
             }
 
-            const targetKey = m.quoted.vM?.key || {
+            // Extraemos la key estructurada desde el handler de index.js
+            const targetKey = m.quoted.key || {
                 remoteJid: m.chat,
-                fromMe: m.quoted.fromMe,
+                fromMe: m.quoted.key?.fromMe || false,
                 id: m.quoted.id,
-                participant: m.quoted.sender
+                participant: m.quoted.key?.participant || m.quoted.sender
             };
 
+            // Ejecutamos la eliminación
             await conn.sendMessage(m.chat, { delete: targetKey });
 
         } catch (e) {
-            console.error(e);
-            m.reply(`*${config.visuals.emoji2}* Error al intentar borrar el mensaje. Asegúrate de que el bot sea administrador.`);
+            console.error('[❌ ERROR EN COMANDO DEL]', e);
+            m.reply(`*${config.visuals.emoji2}* Ocurrió un error inesperado al intentar borrar el mensaje.`);
         }
     }
 };
