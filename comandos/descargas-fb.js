@@ -1,5 +1,5 @@
 import { config } from '../config.js';
-import axios from 'axios';
+import { fbdown } from 'btch-downloader';
 
 const fbDownload = {
     name: 'facebook',
@@ -21,15 +21,16 @@ const fbDownload = {
         await conn.sendMessage(m.chat, { react: { text: '⌛', key: m.key } });
 
         try {
-            const { data: res } = await axios.get(`https://${config.kzmUrl}/api/download/facebook?url=${link}&apiKey=${config.apiKzm}`);
+            const res = await fbdown(link);
 
-            if (!res.status || !res.download) {
+            const videoUrl = res?.HD || res?.hd || res?.SD || res?.sd || res?.url;
+
+            if (!videoUrl) {
                 await conn.sendMessage(m.chat, { react: { text: '❌', key: m.key } });
                 return m.reply('No se pudo obtener el video. Verifica que el enlace sea público.');
             }
 
-            const videoUrl = res.download;
-            const title = res.metadata?.title || 'Video de Facebook';
+            const title = res?.title || 'Video de Facebook';
             const caption = `*${config.visuals.emoji3} Facebook Downloader*\n\n📝 ${title}`;
 
             await conn.sendMessage(m.chat, { video: { url: videoUrl }, caption: caption }, { quoted: m });
@@ -37,7 +38,7 @@ const fbDownload = {
 
         } catch (e) {
             await conn.sendMessage(m.chat, { react: { text: '✖️', key: m.key } });
-            m.reply(`*${config.visuals.emoji2}* Error: ${e.response?.data?.error || e.message}`);
+            m.reply(`*${config.visuals.emoji2}* Error: ${e.message}`);
         }
     }
 };
