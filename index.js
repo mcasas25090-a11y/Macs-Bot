@@ -177,9 +177,18 @@ async function startBot() {
             if (reason === DisconnectReason.loggedOut) {
                 console.log(chalk.red('[🚫] Sesión cerrada. Elimina la carpeta sesion_bot y vuelve a escanear/vincular.'));
                 process.exit();
+            } else if (reason === DisconnectReason.restartRequired) {
+                // Paso ESPERADO justo después de que aceptas el código en el teléfono.
+                // WhatsApp cierra el socket a propósito; hay que reconectar de inmediato
+                // con las credenciales ya guardadas para que la vinculación se complete.
+                console.log(chalk.green('[✅] Código aceptado. Finalizando vinculación...'));
+                pairingPhoneNumber = null;
+                pairingInProgress = false;
+                setTimeout(() => startBot(), 1500);
             } else if (pairingInProgress || (!conn.authState.creds.registered && pairingPhoneNumber)) {
-                // Si estamos a mitad del proceso de vinculación, NO reconectamos automáticamente:
-                // eso generaría un código nuevo e invalidaría el que el usuario está ingresando.
+                // Si estamos a mitad del proceso de vinculación (aún sin ingresar el código),
+                // NO reconectamos automáticamente: eso generaría un código nuevo e invalidaría
+                // el que el usuario está por ingresar.
                 console.log(chalk.yellow('[⏳] Conexión cerrada durante la vinculación. Esperando a que ingreses el código...'));
             } else {
                 setTimeout(() => startBot(), 5000);
