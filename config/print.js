@@ -19,6 +19,7 @@ export const logger = (m, conn) => {
         const msg = m.message[messageType];
         let content = '';
 
+        // Extracción del contenido según el tipo de mensaje
         if (messageType === 'conversation') {
             content = m.message.conversation;
         } else if (messageType === 'extendedTextMessage') {
@@ -35,6 +36,7 @@ export const logger = (m, conn) => {
             content = `📦 [${messageType.replace('Message', '')}]`;
         }
 
+        // Filtro anti-spam para mensajes privados
         if (!isGroup && !isRealOwner) {
             const body = content.trim().toLowerCase();
             const prefixes = config.allPrefixes || ['#', '!', '.'];
@@ -49,17 +51,20 @@ export const logger = (m, conn) => {
         }
 
         const time = new Date().toLocaleTimeString('es-ES', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
-        const pushName = m.key.fromMe ? 'PIXEL-CREW (YO)' : (m.pushName || 'Usuario');
+        
+        // Identidad de Macs Bot
+        const pushName = m.key.fromMe ? 'MACS BOT (YO)' : (m.pushName || 'Usuario');
         const number = senderNumber;
 
-        const chatLabel = isGroup ? chalk.black.bgMagenta(' GRUPO ') : chalk.black.bgCyan(' PRIVADO ');
+        // Diseño de la consola
+        const chatLabel = isGroup ? chalk.black.bgMagenta(' GRUPO ') : chalk.black.bgBlue(' PRIVADO ');
         const timeLabel = chalk.gray(`[${time}]`);
-        const userLabel = m.key.fromMe ? chalk.greenBright(`${pushName}`) : chalk.yellow(`${pushName} (${number})`);
+        const userLabel = m.key.fromMe ? chalk.cyanBright(`${pushName}`) : chalk.yellow(`${pushName} (${number})`);
         const typeLabel = chalk.blueBright(`[${messageType.replace('Message', '').toUpperCase()}]`);
 
         console.log(`${timeLabel} ${chatLabel} ${userLabel} ${typeLabel}: ${chalk.white(content.substring(0, 70))}${content.length > 70 ? '...' : ''}`);
 
     } catch (e) {
-        console.error(chalk.red(`  [🌀 Logger Error]: ${e.message}`));
+        console.error(chalk.red(`  [🤖 Macs Bot Logger Error]: ${e.message}`));
     }
 };
