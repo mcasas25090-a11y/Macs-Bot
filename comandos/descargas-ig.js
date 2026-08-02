@@ -1,5 +1,5 @@
 import { config } from '../config.js';
-import axios from 'axios';
+import { igdl } from 'btch-downloader';
 
 const instagramDownload = {
     name: 'instagram',
@@ -21,14 +21,21 @@ const instagramDownload = {
         await conn.sendMessage(m.chat, { react: { text: '⌛', key: m.key } });
 
         try {
-            const { data: res } = await axios.get(`https://${config.kzmUrl}/api/download/instagram?url=${link}&apiKey=${config.apiKzm}`);
+            const res = await igdl(link);
+            const items = Array.isArray(res) ? res : res?.data;
 
-            if (!res.status || !res.data || res.data.length === 0) {
+            if (!items || items.length === 0) {
                 await conn.sendMessage(m.chat, { react: { text: '❌', key: m.key } });
                 return m.reply('No se pudo encontrar contenido en este enlace.');
             }
 
-            const mediaUrl = res.data[0].url;
+            const mediaUrl = items[0].url || items[0].download_url || items[0].link;
+
+            if (!mediaUrl) {
+                await conn.sendMessage(m.chat, { react: { text: '❌', key: m.key } });
+                return m.reply('No se pudo extraer la URL del contenido.');
+            }
+
             const caption = `*${config.visuals.emoji3} Instagram Downloader*`;
 
             await conn.sendMessage(m.chat, { video: { url: mediaUrl }, caption: caption }, { quoted: m });
@@ -36,7 +43,7 @@ const instagramDownload = {
 
         } catch (e) {
             await conn.sendMessage(m.chat, { react: { text: '✖️', key: m.key } });
-            m.reply(`*${config.visuals.emoji2}* Error: ${e.response?.data?.error || e.message}`);
+            m.reply(`*${config.visuals.emoji2}* Error: ${e.message}`);
         }
     }
 };
