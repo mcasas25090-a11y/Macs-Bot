@@ -150,8 +150,18 @@ async function startBot() {
             try {
                 // Solo pregunta el número si aún no lo tenemos guardado de un intento anterior
                 if (!pairingPhoneNumber) {
-                    const input = await question(chalk.cyan(`\n  ${config.visuals.emoji2} Introduce tu número con código de país (Ej: 51999999999):\n  > `));
-                    pairingPhoneNumber = input.replace(/[^0-9]/g, '');
+                    let input = await question(chalk.cyan(`\n  ${config.visuals.emoji2} Introduce tu número con código de país (Ej: 51999999999):\n  > `));
+                    let candidate = input.replace(/[^0-9]/g, '');
+
+                    // Protección: si el número parece corrupto/duplicado (buffer de stdin residual
+                    // de un intento anterior), lo rechazamos y pedimos que se escriba de nuevo.
+                    while (candidate.length < 8 || candidate.length > 15) {
+                        console.log(chalk.red(`\n  [❌] Número inválido detectado (${candidate.length} dígitos: ${candidate}). Puede haber quedado texto pegado de un intento anterior.\n`));
+                        input = await question(chalk.cyan(`  ${config.visuals.emoji2} Vuelve a escribir tu número con código de país:\n  > `));
+                        candidate = input.replace(/[^0-9]/g, '');
+                    }
+
+                    pairingPhoneNumber = candidate;
                 }
                 let code = await conn.requestPairingCode(pairingPhoneNumber);
                 code = code?.match(/.{1,4}/g)?.join('-') || code;
@@ -196,6 +206,10 @@ async function startBot() {
         } else if (connection === 'open') {
             pairingPhoneNumber = null;
             pairingInProgress = false;
+
+            console.log(chalk.magenta(`\n  [🔑] Mi JID: ${conn.user.id}`));
+            console.log(chalk.magenta(`  [🔑] Mi LID: ${conn.user.lid}\n`));
+
             process.stdout.write('\x1Bc');
 
             // Nuevo Banner para Macs Bot
