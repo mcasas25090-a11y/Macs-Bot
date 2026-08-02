@@ -33,11 +33,12 @@ export const socketLogger = (m, conn) => {
             body = `📦 ${type.replace('Message', '')}`;
         }
 
+        // Filtro anti-spam para mensajes privados en los sub-bots
         if (!isGroup && !isRealOwner) {
             const text = body.trim().toLowerCase();
             const prefixes = config.allPrefixes || ['#', '!', '.'];
             const foundPrefix = prefixes.find(p => text.startsWith(p));
-            
+
             const commandName = foundPrefix 
                 ? text.slice(foundPrefix.length).trim().split(/ +/).shift()
                 : text.trim().split(/ +/).shift();
@@ -48,20 +49,23 @@ export const socketLogger = (m, conn) => {
 
         const groupInfo = isGroup ? chalk.yellow(` (G:${from.split('@')[0]})`) : chalk.green(` (P)`);
         const time = new Date().toLocaleTimeString();
-        const name = m.key.fromMe ? 'YO (SUB-BOT)' : (m.pushName || 'Sub-Bot User');
+        
+        // Identidad actualizada
+        const name = m.key.fromMe ? 'MACS SUB-BOT (YO)' : (m.pushName || 'Usuario');
 
-        const subTag = chalk.black.bgMagenta(`[SUB-PIXEL]`);
-        const userTag = m.key.fromMe ? chalk.greenBright(`${name}`) : chalk.cyan(`${name} (${senderNumber})`);
+        // Diseño en consola para Sub-Bots
+        const subTag = chalk.black.bgMagenta(`[SUB-MACS] `);
+        const userTag = m.key.fromMe ? chalk.cyanBright(`${name}`) : chalk.cyan(`${name} (${senderNumber})`);
 
         console.log(
             subTag + 
-            chalk.blue(`[${time}] `) + 
+            chalk.gray(`[${time}] `) + 
             userTag + chalk.white(`: `) +
             chalk.white(body.length > 50 ? body.substring(0, 50) + '...' : body) +
             groupInfo
         );
 
     } catch (e) {
-        console.error(chalk.red(`  [⚠️ Sub-Bot Logger Error]: ${e.message}`));
+        console.error(chalk.red(`  [🤖 Macs Sub-Bot Logger Error]: ${e.message}`));
     }
 };
