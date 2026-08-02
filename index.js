@@ -39,6 +39,7 @@ let startTime = Date.now();
 const tmpDir = path.join(__dirname, 'tmp');
 if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
 
+// Limpieza automática de la carpeta temporal
 setInterval(() => {
     try {
         const files = fs.readdirSync(tmpDir);
@@ -53,6 +54,7 @@ setInterval(() => {
     } catch (e) {}
 }, 60 * 1000);
 
+// Estructura global en memoria para la Base de Datos
 global.db = {
     data: {
         chats: {},
@@ -76,7 +78,9 @@ global.loadCommands = async () => {
             if (module.default && module.default.name) {
                 global.commands.set(module.default.name.toLowerCase(), module.default);
             }
-        } catch (e) {}
+        } catch (e) {
+            console.error(chalk.red(`[❌ ERROR] Falló al cargar comando: ${file}`), e);
+        }
     }));
 };
 
@@ -95,7 +99,8 @@ async function startBot() {
             creds: state.creds,
             keys: makeCacheableSignalKeyStore(state.keys, P({ level: 'silent' })),
         },
-        browser: Browsers.ubuntu('Chrome'),
+        // Identidad de Macs Bot en dispositivos vinculados
+        browser: Browsers.ubuntu(config.botName || 'Macs Bot'),
         markOnlineOnConnect: true,
         generateHighQualityLinkPreview: true,
         syncFullHistory: false,
@@ -125,14 +130,14 @@ async function startBot() {
 
     if (!conn.authState.creds.registered) {
         setTimeout(async () => {
-            let input = await question(chalk.cyan('\n  [?] Introduce tu número con código de país:\n  > '));
+            let input = await question(chalk.cyan(`\n  ${config.visuals.emoji2} Introduce tu número con código de país (Ej: 51999999999):\n  > `));
             let phoneNumber = input.replace(/[^0-9]/g, '');
             try {
                 let code = await conn.requestPairingCode(phoneNumber);
                 code = code?.match(/.{1,4}/g)?.join('-') || code;
-                console.log(chalk.black.bgCyan(`\n  CODIGO DE VINCULACIÓN: ${code}  \n`));
+                console.log(chalk.black.bgCyan(`\n  💠 CÓDIGO DE VINCULACIÓN: ${code}  \n`));
             } catch (error) {
-                console.error('Error al generar código:', error);
+                console.error(chalk.red('❌ Error al generar código de vinculación:'), error);
             }
         }, 3000);
     }
@@ -144,15 +149,19 @@ async function startBot() {
         if (connection === 'close') {
             const reason = lastDisconnect?.error?.output?.statusCode;
             if (reason === DisconnectReason.loggedOut) {
-                console.log(chalk.red('[!] Sesión cerrada. Elimina la carpeta sesion_bot.'));
+                console.log(chalk.red('[🚫] Sesión cerrada. Elimina la carpeta sesion_bot y vuelve a escanear/vincular.'));
                 process.exit();
             } else {
                 setTimeout(() => startBot(), 5000);
             }
         } else if (connection === 'open') {
             process.stdout.write('\x1Bc');
-            CFonts.say('KAZUMA', { font: 'block', align: 'center', colors: ['cyan', 'magenta'] });
-            console.log(chalk.greenBright.bold(`\n  [✨] ¡KAZUMA CONECTADO!\n  [⌚] Tiempo de carga: ${((Date.now() - startTime) / 1000).toFixed(2)}s`));
+            
+            // Nuevo Banner para Macs Bot
+            CFonts.say('MACS BOT', { font: 'block', align: 'center', colors: ['cyan', 'blue'] });
+            
+            console.log(chalk.cyanBright.bold(`\n  [🚀] ¡MACS BOT INICIADO CORRECTAMENTE!\n  [⌚] Tiempo de carga: ${((Date.now() - startTime) / 1000).toFixed(2)}s`));
+            
             await loadAllSubBots(conn);
             await loadAllMoodBots(conn);
         }
@@ -170,6 +179,7 @@ async function startBot() {
         m.sender = conn.decodeJid ? conn.decodeJid(m.key.participant || m.key.remoteJid) : (m.key.participant || m.key.remoteJid);
         const isGroup = m.chat.endsWith('@g.us');
 
+        // Integración con Base de Datos SQL
         let dbUser = await database.getUser(m.sender);
         if (!dbUser) {
             dbUser = { wallet: 0, bank: 0, genre: 'No definido', marry: null, last_claim: new Date().toISOString() };
@@ -211,15 +221,17 @@ async function startBot() {
             m.quoted = null;
         }
 
+        // Ejecución de Handlers
         logger(m, conn);
         await antiLinkHandler(conn, m);
         await pixelHandler(conn, m, config);
 
+        // Guardado posterior en BD
         try {
             await database.saveUser(m.sender, global.db.data.users[m.sender]);
             if (isGroup) await database.saveChat(m.chat, global.db.data.chats[m.chat]);
         } catch (dbErr) {
-            console.error(dbErr);
+            console.error(chalk.red('[❌ ERROR DB] Fallo al guardar en la base de datos:'), dbErr);
         }
     });
 }
