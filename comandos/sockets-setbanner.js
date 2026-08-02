@@ -1,5 +1,4 @@
 import { config } from '../config.js';
-import { uploadToYotsuba } from '../config/UploadFile.js';
 import fs from 'fs-extra';
 import path from 'path';
 
@@ -7,7 +6,7 @@ const setBanner = {
     name: 'setbanner',
     alias: ['setimg', 'bannerbot'],
     category: 'sockets',
-    desc: 'Cambia la imagen de banner de tu Socket personal.',
+    desc: 'Cambia la imagen de banner de tu Socket personal guardándola localmente.',
     noPrefix: true,
 
     run: async (conn, m) => {
@@ -18,13 +17,13 @@ const setBanner = {
 
             const subSessionsPath = path.resolve('./sesiones_subbots');
             const moodSessionsPath = path.resolve('./sesiones_moods');
-            
+
             const isSubBot = await fs.pathExists(path.join(subSessionsPath, botNumber));
             const isMoodBot = await fs.pathExists(path.join(moodSessionsPath, botNumber));
 
             if (!isSubBot && !isMoodBot) {
                 return await conn.sendMessage(from, { 
-                    text: `*${config.visuals.emoji2} \`Comando exclusivo\` ${config.visuals.emoji2}*\n\n» Este comando no está disponible en el socket principal.\n\n> ¡Intenta usarlo desde la session del socket!` 
+                    text: `*${config.visuals.emoji2} \`Comando exclusivo\` ${config.visuals.emoji2}*\n\n» Este comando no está disponible en el socket principal.\n\n> ¡Intenta usarlo desde la sesión del socket!` 
                 }, { quoted: m });
             }
 
@@ -43,33 +42,38 @@ const setBanner = {
                 }, { quoted: m });
             }
 
-            await conn.sendMessage(from, { text: `*${config.visuals.emoji3}* \`GUARDANDO CONFIGURACIÓN...\`` }, { quoted: m });
+            await conn.sendMessage(from, { text: `*${config.visuals.emoji3}* \`GUARDANDO BANNER LOCALMENTE...\`` }, { quoted: m });
 
             const media = await q.download();
             if (!media) throw new Error('No se pudo descargar la imagen.');
 
-            const link = await uploadToYotsuba(media, mime);
-            const fullLink = `https://upload.yotsuba.giize.com${link}`;
+            // Determinar la ruta de la sesión del bot actual
+            const sessionDir = isSubBot 
+                ? path.join(subSessionsPath, botNumber) 
+                : path.join(moodSessionsPath, botNumber);
 
-            let userSettingsPath = '';
-            if (isSubBot) {
-                userSettingsPath = path.join(subSessionsPath, botNumber, 'settings.json');
-            } else if (isMoodBot) {
-                userSettingsPath = path.join(moodSessionsPath, botNumber, 'settings.json');
-            }
+            const userSettingsPath = path.join(sessionDir, 'settings.json');
 
+            // Definir la extensión y guardar el archivo de imagen de forma local
+            const ext = mime.includes('png') ? '.png' : mime.includes('webp') ? '.webp' : '.jpg';
+            const bannerFileName = `banner${ext}`;
+            const bannerFilePath = path.join(sessionDir, bannerFileName);
+
+            await fs.writeFile(bannerFilePath, media);
+
+            // Actualizar la configuración local
             let localConfig = (await fs.pathExists(userSettingsPath)) ? await fs.readJson(userSettingsPath) : {};
-            localConfig.banner = fullLink;
+            localConfig.banner = bannerFileName;
             localConfig.lastUpdate = Date.now();
 
             await fs.writeJson(userSettingsPath, localConfig, { spaces: 2 });
             const socketName = localConfig.shortName || config.botName;
 
             await conn.sendMessage(from, { 
-                text: `*${config.visuals.emoji3} \`BANNER ACTUALIZADO\` ${config.visuals.emoji3}*\n\nSe ha cambiado el banner para *${socketName}*.\n\n*🚀 Enlace:* ${fullLink}` 
+                text: `*${config.visuals.emoji3} \`BANNER ACTUALIZADO\` ${config.visuals.emoji3}*\n\nSe ha guardado el banner localmente para *${socketName}*.\n\n*📂 Archivo:* ${bannerFileName}` 
             }, { quoted: m });
         } catch (e) {
-            await conn.sendMessage(m.chat, { text: `*${config.visuals.emoji2}* Error al procesar el banner.` }, { quoted: m });
+            await conn.sendMessage(m.chat, { text: `*${config.visuals.emoji2}* Error al procesar el banner local.` }, { quoted: m });
         }
     }
 };
