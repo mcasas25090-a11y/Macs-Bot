@@ -1,10 +1,14 @@
 import Database from 'better-sqlite3';
 import { join } from 'path';
 
+// Iniciamos la base de datos en la raíz del proyecto
 const db = new Database(join(process.cwd(), 'database.db'));
+
+// Optimizaciones de rendimiento de SQLite
 db.pragma('journal_mode = WAL');
 db.pragma('synchronous = normal');
 
+// Creación de las tablas principales de Macs Bot
 db.exec(`
     CREATE TABLE IF NOT EXISTS users (
         jid TEXT PRIMARY KEY,
@@ -38,13 +42,18 @@ db.exec(`
     );
 `);
 
+// Función auxiliar para estandarizar los números de WhatsApp
 const normalizeJid = (j) => j ? j.split('@')[0].split(':')[0].trim() + '@s.whatsapp.net' : null;
 
 export const database = {
+    // ==========================================
+    // SISTEMA DE USUARIOS Y CHATS
+    // ==========================================
     getUser: async (j) => {
         const c = normalizeJid(j);
         return db.prepare('SELECT * FROM users WHERE jid = ?').get(c) || null;
     },
+    
     saveUser: async (j, d) => {
         const c = normalizeJid(j);
         const { wallet = 0, bank = 0, genre = 'No definido', marry = null, last_claim = new Date().toISOString() } = d;
@@ -56,9 +65,11 @@ export const database = {
             marry = excluded.marry, last_claim = excluded.last_claim
         `).run(c, wallet, bank, genre, marry, last_claim);
     },
+    
     getChat: async (j) => {
         return db.prepare('SELECT * FROM chats WHERE jid = ?').get(j) || null;
     },
+    
     saveChat: async (j, d) => {
         const { welcome = 0, antilink = 0, detect = 0 } = d;
         db.prepare(`
@@ -68,10 +79,15 @@ export const database = {
             welcome = excluded.welcome, antilink = excluded.antilink, detect = excluded.detect
         `).run(j, welcome, antilink, detect);
     },
+
+    // ==========================================
+    // SISTEMA DE MINI-JUEGO (GACHA)
+    // ==========================================
     getHarem: async (g, u) => {
         const c = normalizeJid(u);
         return db.prepare('SELECT character_id FROM gacha_ownership WHERE group_jid = ? AND user_jid = ?').all(g, c);
     },
+    
     claimCharacter: async (g, u, i) => {
         const c = normalizeJid(u);
         db.prepare(`
@@ -80,12 +96,15 @@ export const database = {
             ON CONFLICT(group_jid, character_id) DO UPDATE SET user_jid = excluded.user_jid, status = 'domado'
         `).run(g, c, i);
     },
+    
     getCharacterOwner: async (g, i) => {
         return db.prepare('SELECT user_jid, status FROM gacha_ownership WHERE group_jid = ? AND character_id = ?').get(g, i) || null;
     },
+    
     listShop: async (g) => {
         return db.prepare('SELECT * FROM gacha_shop WHERE group_jid = ? ORDER BY listed_at DESC').all(g);
     },
+    
     listCharacter: async (g, s, i, n, p) => {
         const c = normalizeJid(s);
         const t = db.transaction(() => {
@@ -94,21 +113,25 @@ export const database = {
         });
         t();
     },
+    
     buyCharacter: async (g, b, i, p) => {
         const c = normalizeJid(b);
         const s = db.prepare('SELECT seller_jid FROM gacha_shop WHERE group_jid = ? AND character_id = ?').get(g, i);
-        if (!s) throw new Error('404');
+        if (!s) throw new Error('404'); // El personaje no está en venta
+        
+        // Transacción segura: transfiere dinero y propiedad simultáneamente
         const t = db.transaction(() => {
-            db.prepare('UPDATE users SET wallet = wallet - ? WHERE jid = ?').run(p, c);
-            db.prepare('UPDATE users SET wallet = wallet + ? WHERE jid = ?').run(p, s.seller_jid);
-            db.prepare('UPDATE gacha_ownership SET user_jid = ?, status = "domado" WHERE group_jid = ? AND character_id = ?').run(c, g, i);
-            db.prepare('DELETE FROM gacha_shop WHERE group_jid = ? AND character_id = ?').run(g, i);
+            db.prepare('UPDATE users SET wallet = wallet - ? WHERE jid = ?').run(p, c); // Cobra al comprador
+            db.prepare('UPDATE users SET wallet = wallet + ? WHERE jid = ?').run(p, s.seller_jid); // Paga al vendedor
+            db.prepare('UPDATE gacha_ownership SET user_jid = ?, status = "domado" WHERE group_jid = ? AND character_id = ?').run(c, g, i); // Cambia de dueño
+            db.prepare('DELETE FROM gacha_shop WHERE group_jid = ? AND character_id = ?').run(g, i); // Lo quita de la tienda
         });
         t();
         return s.seller_jid;
     }
 };
 
+// Utilidad para consultas libres
 export const query = async (t, p = []) => {
     return { rows: db.prepare(t).all(...p) };
 };
