@@ -2,7 +2,6 @@ import { config } from '../config.js';
 import { database } from '../database.js';
 import fs from 'fs';
 import path from 'path';
-import axios from 'axios';
 
 const gachaPath = path.resolve('./config/database/gacha/gacha_list.json');
 const baseGroup = "120363423871589037@g.us";
@@ -11,7 +10,7 @@ const rwCommand = {
     name: 'rw',
     alias: ['roll', 'waifu'],
     category: 'gacha',
-    desc: 'Realiza un roll para descubrir un nuevo personaje usando la API de Kazuma.',
+    desc: 'Realiza un roll para descubrir un nuevo personaje.',
     noPrefix: true,
     isGroup: true,
 
@@ -53,18 +52,8 @@ const rwCommand = {
             const status = infoGrupo ? infoGrupo.status : 'libre';
             const owner = infoGrupo ? infoGrupo.user_jid : null;
 
-            let imageUrl = infoFija.url;
-            if (!imageUrl) {
-                const queryStr = `${infoFija.name} ${infoFija.source}`;
-                const apiUrl = `https://${config.kzmUrl}/api/search/pinterest?query=${encodeURIComponent(queryStr)}&apiKey=kzm-OifUrFOl-oSSLeonc`;
-                try {
-                    const response = await axios.get(apiUrl);
-                    if (response.data.status && response.data.data.length > 0) {
-                        imageUrl = response.data.data[0].image_url;
-                    }
-                } catch (e) {}
-            }
-            if (!imageUrl) imageUrl = 'https://telegra.ph/file/0cf76964ff002f232491a.jpg';
+            // Usa la URL fija del personaje; si no tiene, cae a una imagen genérica.
+            const imageUrl = infoFija.url || 'https://telegra.ph/file/0cf76964ff002f232491a.jpg';
 
             let caption = `*» (❍ᴥ❍ʋ) \`GACHA ROLL\` «*\n\n`;
             caption += `*Nombre:* ${infoFija.name}\n`;
