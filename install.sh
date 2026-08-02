@@ -14,7 +14,7 @@ IS_TERMUX=false
 if [[ $(command -v termux-setup-storage) ]]; then
     IS_TERMUX=true
     termux-setup-storage -y
-    pkg install git nodejs ffmpeg libwebp -y
+    pkg install git nodejs ffmpeg libwebp build-essential python -y
 fi
 
 echo -e "\e[1;36m[🚀] Instalando módulos base de Macs Bot...\e[0m"
@@ -43,6 +43,13 @@ if [ "$IS_TERMUX" = true ]; then
 
     [ -f "$U1" ] && echo "$UTILITY_PATCH" > "$U1"
     [ -f "$U2" ] && echo "$UTILITY_PATCH" > "$U2"
+
+    echo -e "\e[1;34m[⚙️] Compilando better-sqlite3 desde el código fuente (necesario en Termux ARM64)...\e[0m"
+    if [ -d "./node_modules/better-sqlite3" ]; then
+        (cd node_modules/better-sqlite3 && node-gyp rebuild --release) \
+            && echo -e "\e[1;32m[✅] better-sqlite3 compilado correctamente.\e[0m" \
+            || echo -e "\e[1;31m[❌] Falló la compilación de better-sqlite3. Puede que necesites instalar 'clang make python git' manualmente.\e[0m"
+    fi
 else
     npm install
 fi
