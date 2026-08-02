@@ -1,5 +1,5 @@
 import { config } from '../config.js';
-import axios from 'axios';
+import { yts, youtube } from 'btch-downloader';
 
 const youtubeVideo = {
     name: 'play2',
@@ -21,25 +21,22 @@ const youtubeVideo = {
                 videoUrl = text;
                 await m.reply(`*${config.visuals.emoji3}* Enlace detectado. Enviando video, espera un momento...`);
             } else {
-                const { data: searchRes } = await axios.get(`https://${config.kzmUrl}/api/search/youtube?apiKey=${config.apiKzm}&q=${encodeURIComponent(text)}`);
+                const searchRes = await yts(text);
+                const results = searchRes?.data || searchRes?.videos || searchRes;
 
-                if (!searchRes.status || !searchRes.result || searchRes.result.length === 0) {
+                if (!results || results.length === 0) {
                     await conn.sendMessage(m.chat, { react: { text: '❌', key: m.key } });
                     return m.reply('No se encontraron resultados.');
                 }
 
-                const firstResult = searchRes.result[0];
-                videoUrl = firstResult.url;
-                const durationStr = firstResult.duration;
+                const firstResult = results[0];
+                videoUrl = firstResult.url || firstResult.link || `https://youtu.be/${firstResult.videoId}`;
 
-                const parts = durationStr.split(':').map(Number);
+                const durationStr = firstResult.duration?.timestamp || firstResult.duration || '0:00';
+                const parts = String(durationStr).split(':').map(Number);
                 let totalMinutes = 0;
-
-                if (parts.length === 3) {
-                    totalMinutes = (parts[0] * 60) + parts[1];
-                } else if (parts.length === 2) {
-                    totalMinutes = parts[0];
-                }
+                if (parts.length === 3) totalMinutes = (parts[0] * 60) + parts[1];
+                else if (parts.length === 2) totalMinutes = parts[0];
 
                 if (totalMinutes >= 45) {
                     await conn.sendMessage(m.chat, { react: { text: '⚠️', key: m.key } });
@@ -48,31 +45,34 @@ const youtubeVideo = {
 
                 const infoText = `*${config.visuals.emoji3} YouTube Video ${config.visuals.emoji3}*\n\n` +
                                  `*= Título* »\n> ${firstResult.title}\n` +
-                                 `*= Canal* »\n> ${firstResult.channel}\n` +
-                                 `*= Publicado* »\n> ${firstResult.publishedAt}\n` +
-                                 `*= Duración* »\n> ${firstResult.duration}\n` +
-                                 `*= Vistas* »\n> ${firstResult.views}\n` +
+                                 `*= Canal* »\n> ${firstResult.author?.name || firstResult.channel || 'Desconocido'}\n` +
+                                 `*= Duración* »\n> ${durationStr}\n` +
+                                 `*= Vistas* »\n> ${firstResult.views || 'N/A'}\n` +
                                  `*= Enlace* »\n> ${videoUrl}\n\n` +
                                  `_Enviando video, espera un momento..._`;
 
-                await conn.sendMessage(m.chat, { 
-                    image: { url: firstResult.thumbnail }, 
-                    caption: infoText 
-                }, { quoted: m });
+                const thumbnail = firstResult.thumbnail || firstResult.image;
+                if (thumbnail) {
+                    await conn.sendMessage(m.chat, { image: { url: thumbnail }, caption: infoText }, { quoted: m });
+                } else {
+                    await m.reply(infoText);
+                }
             }
 
-            const { data: videoRes } = await axios.get(`https://${config.kzmUrl}/api/download/ytvideo?url=${videoUrl}&apiKey=${config.apiKzm}`);
+            const videoRes = await youtube(videoUrl);
+            const videoData = Array.isArray(videoRes) ? videoRes[0] : videoRes;
 
-            if (!videoRes.status || !videoRes.result) {
+            const downloadUrl = videoData?.mp4 || videoData?.video || videoData?.download_url || videoData?.url;
+            const title = videoData?.title || 'video';
+
+            if (!downloadUrl) {
                 await conn.sendMessage(m.chat, { react: { text: '❌', key: m.key } });
-                return m.reply('Error al obtener el video del servidor.');
+                return m.reply('Error al obtener el video.');
             }
 
-            const videoData = videoRes.result;
-
-            await conn.sendMessage(m.chat, { 
-                video: { url: videoData.download_url }, 
-                caption: `*${config.visuals.emoji3} ${videoData.title}*`,
+            await conn.sendMessage(m.chat, {
+                video: { url: downloadUrl },
+                caption: `*${config.visuals.emoji3} ${title}*`,
                 mimetype: 'video/mp4'
             }, { quoted: m });
 
@@ -80,7 +80,7 @@ const youtubeVideo = {
 
         } catch (e) {
             await conn.sendMessage(m.chat, { react: { text: '✖️', key: m.key } });
-            m.reply(`*${config.visuals.emoji2}* Error: ${e.response?.data?.error || e.message}`);
+            m.reply(`*${config.visuals.emoji2}* Error: ${e.message}`);
         }
     }
 };
