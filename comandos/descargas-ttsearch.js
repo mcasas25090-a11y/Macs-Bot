@@ -1,38 +1,46 @@
 import { config } from '../config.js';
-import axios from 'axios';
+import { ttdl } from 'btch-downloader';
 
 const tiktokSearch = {
     name: 'ttsearch',
     alias: ['tiktoksearch', 'tiktoks'],
     category: 'descargas',
-    desc: 'Busca videos en TikTok con todo y enlace de descarga.',
+    desc: 'Descarga un video de TikTok a partir de su enlace.',
     noPrefix: true,
 
     run: async (conn, m, args, usedPrefix, commandName, text) => {
-        if (!text) return m.reply(`*${config.visuals.emoji2}* Ingrese búsqueda.\nEj: #ttsearch RDjavi`);
+        const urlMatch = text?.match(/https?:\/\/[^\s]+/gi);
+        const link = urlMatch ? urlMatch[0] : null;
+
+        if (!link) return m.reply(`*${config.visuals.emoji2}* Ingresa el enlace del video de TikTok.\nEj: #ttsearch https://vt.tiktok.com/xxxxx`);
+
+        if (!link.includes('tiktok.com')) {
+            return m.reply(`*${config.visuals.emoji2}* El enlace no parece ser de TikTok.`);
+        }
 
         await conn.sendMessage(m.chat, { react: { text: '⌛', key: m.key } });
 
         try {
-            const { data: res } = await axios.get(`https://${config.kzmUrl}/api/search/tiktok?apiKey=${config.apiKzm}&query=${encodeURIComponent(text)}`);
+            const res = await ttdl(link);
+            const data = Array.isArray(res) ? res[0] : (res?.data || res);
 
-            if (!res.status || !res.data?.length) {
+            const videoUrl = data?.video?.[0] || data?.play || data?.no_watermark || data?.video_hd || data?.url;
+            const title = data?.title || data?.desc || 'TikTok';
+            const author = data?.author?.nickname || data?.author || 'Desconocido';
+            const cover = data?.cover || data?.thumbnail;
+
+            if (!videoUrl) {
                 await conn.sendMessage(m.chat, { react: { text: '❌', key: m.key } });
-                return m.reply('Sin resultados.');
+                return m.reply('No se pudo obtener el video. Verifica el enlace.');
             }
 
-            let txt = `*${config.visuals.emoji3} Resultados:* ${text}\n\n`;
-            res.data.slice(0, 10).forEach((v, i) => {
-                txt += `*${i + 1}.* ${v.title || 'TikTok'}\n`;
-                txt += `   👤 *Autor:* ${v.author.nickname}\n`;
-                txt += `   📥 *Enlace de descarga »* ${v.play}\n\n`;
-            });
+            const txt = `*${config.visuals.emoji3} TikTok*\n\n📝 ${title}\n👤 *Autor:* ${author}`;
 
-            await conn.sendMessage(m.chat, { image: { url: res.data[0].cover }, caption: txt.trim() }, { quoted: m });
+            await conn.sendMessage(m.chat, { video: { url: videoUrl }, caption: txt }, { quoted: m });
             await conn.sendMessage(m.chat, { react: { text: '✅', key: m.key } });
-        } catch {
+        } catch (e) {
             await conn.sendMessage(m.chat, { react: { text: '✖️', key: m.key } });
-            m.reply('Error en API.');
+            m.reply(`*${config.visuals.emoji2}* Error: ${e.message}`);
         }
     }
 };
