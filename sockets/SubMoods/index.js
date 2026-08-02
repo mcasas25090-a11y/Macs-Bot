@@ -41,7 +41,8 @@ export const startMoodBot = async (userId, mainConn = null) => {
             creds: state.creds,
             keys: makeCacheableSignalKeyStore(state.keys, P({ level: 'silent' })),
         },
-        browser: Browsers.ubuntu('Chrome'), 
+        // Identidad de navegador para Macs Bot
+        browser: Browsers.ubuntu(config.botName || 'Macs MoodBot'), 
         markOnlineOnConnect: true,
         generateHighQualityLinkPreview: false,
         msgRetryCounterCache,
@@ -69,15 +70,15 @@ export const startMoodBot = async (userId, mainConn = null) => {
             const reason = new Error(lastDisconnect?.error)?.message;
 
             if (code !== DisconnectReason.loggedOut) {
-                console.log(chalk.magenta(` [SubMood] `) + chalk.yellow(`Reconectando: ${userNumber} | Motivo: ${reason}`));
+                console.log(chalk.yellow(`[⚙️ MACS MOOD] Reconectando: ${userNumber} | Motivo: ${reason}`));
                 setTimeout(() => startMoodBot(jid, mainConn), 5000);
             } else {
-                console.log(chalk.red(` [SubMood] Sesión terminada: ${userNumber}`));
+                console.log(chalk.red(`[🚫 MACS MOOD] Sesión terminada: ${userNumber}`));
                 global.moodBots.delete(jid);
                 await fs.remove(userSessionPath);
             }
         } else if (connection === 'open') {
-            console.log(chalk.bgMagenta.white(` [SubMood] `) + chalk.green(` ✅ Jerarquía Mood activa: ${userNumber}`));
+            console.log(chalk.green(`[✅ MACS MOOD] Jerarquía Mood activa: ${userNumber}`));
         }
     });
 
@@ -89,7 +90,7 @@ export const startMoodBot = async (userId, mainConn = null) => {
             if (rawMsg.key && rawMsg.key.remoteJid === 'status@broadcast') return;
 
             const m = smsg(sock, rawMsg);
-            
+
             const realOwnerNumber = (typeof config.owner[0] === 'string' ? config.owner[0] : config.owner[0][0]).replace(/\D/g, '');
             const isRealOwner = m.sender.includes(realOwnerNumber) || m.key.fromMe;
 
@@ -108,15 +109,16 @@ export const startMoodBot = async (userId, mainConn = null) => {
             moodLogger(m, sock);
             await antiLinkHandler(sock, m);
             await pixelHandler(sock, m, config);
-            
+
         } catch (err) {
-            console.error(chalk.red('[ERROR SUBMOOD]'), err);
+            console.error(chalk.red('[❌ ERROR MACS MOOD]'), err);
         }
     });
 
     return sock;
 };
 
+// Función de estandarización smsg
 function smsg(conn, m) {
     if (!m) return m;
     let M = m.key;
@@ -131,7 +133,7 @@ function smsg(conn, m) {
         m.mtype = Object.keys(m.message)[0];
         m.body = m.message.conversation || m.message[m.mtype]?.caption || m.message[m.mtype]?.text || (m.mtype === 'listResponseMessage') && m.message[m.mtype]?.singleSelectReply?.selectedRowId || (m.mtype === 'buttonsResponseMessage') && m.message[m.mtype]?.selectedButtonId || (m.mtype === 'templateButtonReplyMessage') && m.message[m.mtype]?.selectedId || m.message[m.mtype] || '';
         m.text = typeof m.body === 'string' ? m.body : '';
-        
+
         let quoted = m.message[m.mtype]?.contextInfo?.quotedMessage || null;
         if (quoted) {
             let qMtype = Object.keys(quoted)[0];
@@ -157,7 +159,7 @@ function smsg(conn, m) {
 export const loadAllMoodBots = async (mainConn) => {
     if (!(await fs.pathExists(moodPath))) return;
     const sessions = await fs.readdir(moodPath);
-    console.log(chalk.magenta(`[SISTEMA] Restaurando Jerarquías Mood: ${sessions.length}`));
+    console.log(chalk.magenta(`[🚀 SISTEMA MACS] Restaurando Jerarquías Mood: ${sessions.length}`));
     for (const num of sessions) {
         if (num.includes('.') || isNaN(num)) continue; 
         await new Promise(r => setTimeout(r, 3000));
