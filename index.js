@@ -84,12 +84,28 @@ global.loadCommands = async () => {
     }));
 };
 
+// --- Control de estado de pairing (evita pedir el número dos veces) ---
+let pairingPhoneNumber = null;
+let pairingInProgress = false;
+let botStarting = false;
+
 async function startBot() {
+    // Evita que dos instancias de startBot corran al mismo tiempo
+    if (botStarting) return;
+    botStarting = true;
+
     const sessionDir = './sesion_bot';
     if (!fs.existsSync(sessionDir)) fs.mkdirSync(sessionDir);
 
     const { state, saveCreds } = await useMultiFileAuthState(sessionDir);
-    const { version } = await fetchLatestBaileysVersion();
+
+    let version;
+    try {
+        ({ version } = await fetchLatestBaileysVersion());
+    } catch (e) {
+        console.log(chalk.yellow('[⚠️] No se pudo obtener la última versión de WhatsApp Web, usando la versión por defecto.'));
+        version = undefined;
+    }
 
     const conn = makeWASocket({
         version,
@@ -128,16 +144,24 @@ async function startBot() {
         welcomeHandler(conn);
     } catch (e) {}
 
-    if (!conn.authState.creds.registered) {
+    if (!conn.authState.creds.registered && !pairingInProgress) {
+        pairingInProgress = true;
         setTimeout(async () => {
-            let input = await question(chalk.cyan(`\n  ${config.visuals.emoji2} Introduce tu número con código de país (Ej: 51999999999):\n  > `));
-            let phoneNumber = input.replace(/[^0-9]/g, '');
             try {
-                let code = await conn.requestPairingCode(phoneNumber);
+                // Solo pregunta el número si aún no lo tenemos guardado de un intento anterior
+                if (!pairingPhoneNumber) {
+                    const input = await question(chalk.cyan(`\n  ${config.visuals.emoji2} Introduce tu número con código de país (Ej: 51999999999):\n  > `));
+                    pairingPhoneNumber = input.replace(/[^0-9]/g, '');
+                }
+                let code = await conn.requestPairingCode(pairingPhoneNumber);
                 code = code?.match(/.{1,4}/g)?.join('-') || code;
                 console.log(chalk.black.bgCyan(`\n  💠 CÓDIGO DE VINCULACIÓN: ${code}  \n`));
+                console.log(chalk.cyan(`  Ingresa este código en WhatsApp AHORA (tienes muy poco tiempo antes de que expire).\n`));
             } catch (error) {
                 console.error(chalk.red('❌ Error al generar código de vinculación:'), error);
+                pairingPhoneNumber = null; // permite reintentar con otro número si falló
+            } finally {
+                pairingInProgress = false;
             }
         }, 3000);
     }
@@ -148,20 +172,28 @@ async function startBot() {
         const { connection, lastDisconnect } = update;
         if (connection === 'close') {
             const reason = lastDisconnect?.error?.output?.statusCode;
+            botStarting = false;
+
             if (reason === DisconnectReason.loggedOut) {
                 console.log(chalk.red('[🚫] Sesión cerrada. Elimina la carpeta sesion_bot y vuelve a escanear/vincular.'));
                 process.exit();
+            } else if (pairingInProgress || (!conn.authState.creds.registered && pairingPhoneNumber)) {
+                // Si estamos a mitad del proceso de vinculación, NO reconectamos automáticamente:
+                // eso generaría un código nuevo e invalidaría el que el usuario está ingresando.
+                console.log(chalk.yellow('[⏳] Conexión cerrada durante la vinculación. Esperando a que ingreses el código...'));
             } else {
                 setTimeout(() => startBot(), 5000);
             }
         } else if (connection === 'open') {
+            pairingPhoneNumber = null;
+            pairingInProgress = false;
             process.stdout.write('\x1Bc');
-            
+
             // Nuevo Banner para Macs Bot
             CFonts.say('MACS BOT', { font: 'block', align: 'center', colors: ['cyan', 'blue'] });
-            
+
             console.log(chalk.cyanBright.bold(`\n  [🚀] ¡MACS BOT INICIADO CORRECTAMENTE!\n  [⌚] Tiempo de carga: ${((Date.now() - startTime) / 1000).toFixed(2)}s`));
-            
+
             await loadAllSubBots(conn);
             await loadAllMoodBots(conn);
         }
