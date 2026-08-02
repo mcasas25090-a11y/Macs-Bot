@@ -19,7 +19,7 @@ const aiGemini = {
         if (isImageRequest) {
             await conn.sendMessage(m.chat, { react: { text: '⌛', key: m.key } });
 
-            const search = text.replace(/(kazuma|ai|ia|gemini|genera|dibuja|buscame|search|una|un|de|la|el|imagen|foto)/gi, '').trim();
+            const search = text.replace(/(Macs|ai|ia|gemini|genera|dibuja|buscame|search|una|un|de|la|el|imagen|foto)/gi, '').trim();
             const query = search || text;
 
             try {
